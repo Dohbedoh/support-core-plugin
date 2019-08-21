@@ -40,7 +40,6 @@ import org.kohsuke.stapler.Stapler;
 import javax.annotation.CheckForNull;
 import javax.servlet.ServletContext;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -49,6 +48,7 @@ import java.lang.management.MemoryManagerMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
+import java.nio.file.Files;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -268,7 +268,7 @@ public class AboutJenkins extends Component {
             for (File file : FileUtils.listFiles(rootPath, null, false)) {
                 if (file.isFile()) {
                     try {
-                        result.append(Util.getDigestOf(new FileInputStream(file)))
+                        result.append(Util.getDigestOf(Files.newInputStream(file.toPath())))
                                 .append("  ")
                                 .append(file.getName()).append('\n');
                     } catch (IOException e) {
@@ -816,7 +816,7 @@ public class AboutJenkins extends Component {
             File jenkinsWar = Lifecycle.get().getHudsonWar();
             if (jenkinsWar != null) {
                 try {
-                    out.println(Util.getDigestOf(new FileInputStream(jenkinsWar)) + "  jenkins.war");
+                    out.println(Util.getDigestOf(Files.newInputStream(jenkinsWar.toPath())) + "  jenkins.war");
                 } catch (IOException e) {
                     logger.log(Level.WARNING, "Could not compute MD5 of jenkins.war", e);
                 }
@@ -872,7 +872,7 @@ public class AboutJenkins extends Component {
             for (File file : pluginFiles) {
                 if (file.isFile()) {
                     try {
-                        out.println(Util.getDigestOf(new FileInputStream(file)) + "  plugins/" + file
+                        out.println(Util.getDigestOf(Files.newInputStream(file.toPath())) + "  plugins/" + file
                                 .getName());
                     } catch (IOException e) {
                         logger.log(Level.WARNING, "Could not compute MD5 of war/" + file, e);

@@ -36,7 +36,6 @@ import org.acegisecurity.context.SecurityContext;
 import org.acegisecurity.context.SecurityContextHolder;
 import org.kohsuke.args4j.Argument;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -109,7 +108,7 @@ public class SupportCommand extends CLICommand {
         public OutputStream call() throws IOException {
             Path path = Files.createFile(Paths.get(System.getProperty("java.io.tmpdir"), filename));
             System.err.println("Creating: " + path);
-            return new RemoteOutputStream(new FileOutputStream(path.toFile()));
+            return new RemoteOutputStream(Files.newOutputStream(path));
         }
     }
 

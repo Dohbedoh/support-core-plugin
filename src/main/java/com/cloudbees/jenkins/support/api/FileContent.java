@@ -28,10 +28,10 @@ import com.cloudbees.jenkins.support.filter.ContentFilter;
 import com.cloudbees.jenkins.support.filter.PrefilteredContent;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -89,7 +89,7 @@ public class FileContent extends PrefilteredContent {
      * @throws IOException if something goes wrong while creating the stream for reading #file.
      */
     protected InputStream getInputStream() throws IOException {
-        return new FileInputStream(file);
+        return Files.newInputStream(file.toPath());
     }
 
     private BaseFileContent createBaseFileContent(File file, long maxSize) {

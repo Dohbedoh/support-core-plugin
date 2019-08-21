@@ -28,15 +28,10 @@ import io.jenkins.lib.support_log_formatter.SupportLogFormatter;
 import hudson.util.IOUtils;
 import net.jcip.annotations.GuardedBy;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
-import java.io.Writer;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -159,7 +154,7 @@ public class SupportLogHandler extends Handler {
                     }
                 }
             }
-        } catch (FileNotFoundException e) {
+        } catch (IOException e) {
             // ignore
         } finally {
             outputLock.unlock();
@@ -232,7 +227,7 @@ public class SupportLogHandler extends Handler {
             value = {"RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", "DM_DEFAULT_ENCODING"},
             justification = "Best effort"
     )
-    private void setFile(File file) throws FileNotFoundException {
+    private void setFile(File file) throws IOException {
         outputLock.lock();
         try {
             if (file == null) {
@@ -244,26 +239,9 @@ public class SupportLogHandler extends Handler {
                 parentFile.mkdirs();
             }
             boolean success = false;
-            FileOutputStream fos = null;
-            BufferedOutputStream bos = null;
-            OutputStreamWriter writer = null;
-            try {
-                fos = new FileOutputStream(file);
-                bos = new BufferedOutputStream(fos);
-                try {
-                    writer = new OutputStreamWriter(bos, "utf-8");
-                } catch (UnsupportedEncodingException e) {
-                    writer = new OutputStreamWriter(bos); // fall back to something sensible
-                }
-                setWriter(writer);
+            try (BufferedWriter bw = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8, StandardOpenOption.WRITE)) {
+                setWriter(bw);
                 fileCount = 0;
-                success = true;
-            } finally {
-                if (!success) {
-                    IOUtils.closeQuietly(writer);
-                    IOUtils.closeQuietly(bos);
-                    IOUtils.closeQuietly(fos);
-                }
             }
         } finally {
             outputLock.unlock();

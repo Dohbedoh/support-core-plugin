@@ -10,12 +10,13 @@ import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.LinkedHashMap;
@@ -106,28 +107,20 @@ class SmartLogFetcher {
                     final long localLength = local.length();
                     if (entry.getValue() < Long.MAX_VALUE) {
                         // only copy the new content
-                        FileOutputStream fos = null;
-                        InputStream is = null;
-                        try {
-                            fos = new FileOutputStream(local, true);
-                            is = remoteDir.child(entry.getKey()).readFromOffset(localLength);
+                        try (
+                            OutputStream fos = Files.newOutputStream(local.toPath(), StandardOpenOption.APPEND);
+                            InputStream is = remoteDir.child(entry.getKey()).readFromOffset(localLength)
+                        ){
                             IOUtils.copy(is, fos);
-                        } finally {
-                            IOUtils.closeQuietly(is);
-                            IOUtils.closeQuietly(fos);
                         }
                     }
                     result.put(entry.getKey(), local);
                 } else {
-                    FileOutputStream fos = null;
-                    InputStream is = null;
-                    try {
-                        fos = new FileOutputStream(local, false);
-                        is = remoteDir.child(entry.getKey()).read();
+                    try (
+                            OutputStream fos = Files.newOutputStream(local.toPath(), StandardOpenOption.CREATE);
+                            InputStream is = remoteDir.child(entry.getKey()).read()
+                    ){
                         IOUtils.copy(is, fos);
-                    } finally {
-                        IOUtils.closeQuietly(is);
-                        IOUtils.closeQuietly(fos);
                     }
                     result.put(entry.getKey(), local);
                 }
@@ -164,7 +157,7 @@ class SmartLogFetcher {
 
         public FileHash(File file) throws IOException {
             this.length = file.length();
-            this.md5 = getDigestOf(new FileInputStream(file), length);
+            this.md5 = getDigestOf(Files.newInputStream(file.toPath()), length);
         }
 
         public FileHash(FilePath file) throws IOException, InterruptedException {
@@ -185,7 +178,7 @@ class SmartLogFetcher {
          */
         public boolean isPartialMatch(File file) throws IOException {
             if (file.length() < length) return false;
-            return md5.equals(getDigestOf(new FileInputStream(file), length));
+            return md5.equals(getDigestOf(Files.newInputStream(file.toPath()), length));
         }
 
         /**

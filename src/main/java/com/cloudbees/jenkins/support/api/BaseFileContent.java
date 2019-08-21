@@ -33,7 +33,6 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -224,7 +223,7 @@ class BaseFileContent {
         private long len;
 
         TruncatedFileReader(File file, long len) throws IOException {
-            super(new InputStreamReader(new FileInputStream(file), ENCODING));
+            super(new InputStreamReader(Files.newInputStream(file.toPath()), ENCODING));
             this.len = len;
         }
 
