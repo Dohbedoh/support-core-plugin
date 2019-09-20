@@ -51,6 +51,12 @@
         </p>
       </j:if>
       <f:form name="bundle-contents" method="POST" action="generateAllBundles">
+<!--        <f:descriptorList descriptors="${it.applicableComponentsDescriptors}"-->
+<!--                          field="components"-->
+<!--                          instances="${it.components}"/>-->
+<!--        <f:entry>-->
+<!--          <f:submit value="${%Generate Bundle}"/>-->
+<!--        </f:entry>-->
         <j:forEach var="component" items="${it.components}">
           <f:entry field="component">
             <div name="components">

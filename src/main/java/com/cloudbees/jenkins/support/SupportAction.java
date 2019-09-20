@@ -28,6 +28,7 @@ import com.cloudbees.jenkins.support.api.Component;
 import com.cloudbees.jenkins.support.api.SupportProvider;
 import com.cloudbees.jenkins.support.filter.ContentFilters;
 import hudson.Extension;
+import hudson.ExtensionList;
 import hudson.model.RootAction;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Main root action for generating support.

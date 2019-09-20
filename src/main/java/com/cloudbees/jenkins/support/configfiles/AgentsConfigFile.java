@@ -23,12 +23,17 @@
  */
 package com.cloudbees.jenkins.support.configfiles;
 
+import com.cloudbees.jenkins.support.api.AbstractComponent;
 import com.cloudbees.jenkins.support.api.Component;
 import com.cloudbees.jenkins.support.api.Container;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
+import hudson.model.Actionable;
+import hudson.model.Computer;
+import hudson.model.Descriptor;
 import hudson.security.Permission;
 import jenkins.model.Jenkins;
+import org.jenkinsci.Symbol;
 
 import java.io.File;
 import java.util.Collections;
@@ -42,7 +47,7 @@ import java.util.logging.Logger;
  * Unselected by default.
  */
 @Extension
-public class AgentsConfigFile extends Component {
+public class AgentsConfigFile extends AbstractComponent<Computer> {
 
     @Override
     public boolean isSelectedByDefault() {
@@ -58,20 +63,46 @@ public class AgentsConfigFile extends Component {
     @NonNull
     @Override
     public String getDisplayName() {
-        return Messages.AgentsConfigFile_displayName();
+        return "Agent Configuration File";
     }
 
     @Override
     public void addContents(@NonNull Container container) {
-        File[] agentDirs = new File(Jenkins.get().getRootDir(), "nodes").listFiles();
-        if (agentDirs == null) {
-            return;
-        }
-        for(File agentDir : agentDirs) {
-            File config = new File(agentDir, "config.xml");
-            container.add(new XmlRedactedSecretFileContent("nodes/slave/{0}/config.xml", new String[]{agentDir.getName()}, config));
-        }
+        Jenkins.get().getNodes().forEach(node -> addContents(container, node.toComputer()));
     }
 
-    private static final Logger LOGGER = Logger.getLogger(AgentsConfigFile.class.getName());
+    @Override
+    public void addContents(@NonNull Container container, Computer item) {
+        if(item.getNode() == null) {
+            return;
+        }
+        File agentDir = new File(Jenkins.get().getRootDir(), String.format("nodes/{0}", item.getName()));
+        File config = new File(agentDir, "config.xml");
+        container.add(new XmlRedactedSecretFileContent("nodes/slave/" + agentDir.getName() + "/config.xml", config));
+    }
+
+    @Override
+    public boolean isApplicable(Class<?> clazz) {
+        return Computer.class.isAssignableFrom(clazz) || Jenkins.class.isAssignableFrom(clazz);
+    }
+
+    @Override
+    public DescriptorImpl getDescriptor() {
+        return Jenkins.get().getDescriptorByType(DescriptorImpl.class);
+    }
+
+    @Extension
+    @Symbol("agentsConfigFileComponent")
+    public static class DescriptorImpl<T extends Actionable> extends Descriptor<AbstractComponent<T>> {
+
+        /**
+         * {@inheritDoc}
+         */
+        @NonNull
+        @Override
+        public String getDisplayName() {
+            return "Agent Configuration File";
+        }
+
+    }
 }

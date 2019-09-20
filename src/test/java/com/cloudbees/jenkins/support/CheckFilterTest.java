@@ -92,21 +92,21 @@ public class CheckFilterTest {
 
         // Check the components are filtered correctly
         assertComponent(Arrays.asList(  AboutJenkins.class,
-                                        AboutUser.class,
-                                        AgentsConfigFile.class,
-                                        BuildQueue.class,
-                                        ConfigFileComponent.class,
-                                        DumpExportTable.class,
-                                        EnvironmentVariables.class,
-                                        JVMProcessSystemMetricsContents.Agents.class,
-                                        JVMProcessSystemMetricsContents.Master.class,
-                                        SystemConfiguration.class,
-                                        NetworkInterfaces.class,
-                                        NodeMonitors.class,
-                                        UpdateCenter.class,
-                                        SystemProperties.class,
-                                        ThreadDumps.class
-                                    ), checker);
+                AboutUser.class,
+                AgentsConfigFile.class,
+                BuildQueue.class,
+                ConfigFileComponent.class,
+                DumpExportTable.class,
+                EnvironmentVariables.class,
+                JVMProcessSystemMetricsContents.Agents.class,
+                JVMProcessSystemMetricsContents.Master.class,
+                SystemConfiguration.class,
+                NetworkInterfaces.class,
+                NodeMonitors.class,
+                UpdateCenter.class,
+                SystemProperties.class,
+                ThreadDumps.class
+        ), checker);
 
         // Cancel the job running
         build.cancel(true);
