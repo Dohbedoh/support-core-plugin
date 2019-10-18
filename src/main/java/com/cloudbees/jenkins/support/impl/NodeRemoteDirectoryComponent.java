@@ -64,14 +64,20 @@ public class NodeRemoteDirectoryComponent extends DirectoryComponent<Computer> i
 
     }
 
+    @NonNull
+    @Override
+    public String getDisplayName() {
+        return Messages.NodeRemoteDirectoryComponent_DisplayName();
+    }
+
     @Override
     public boolean isApplicable(Computer item) {
         return item != Jenkins.get().toComputer();
     }
 
     @Override
-    public NodeRemoteDirectoryComponent.DescriptorImpl getDescriptor() {
-        return Jenkins.get().getDescriptorByType(NodeRemoteDirectoryComponent.DescriptorImpl.class);
+    public DescriptorImpl getDescriptor() {
+        return Jenkins.get().getDescriptorByType(DescriptorImpl.class);
     }
 
     @Extension
@@ -93,7 +99,7 @@ public class NodeRemoteDirectoryComponent extends DirectoryComponent<Computer> i
         @NonNull
         @Override
         public String getDisplayName() {
-            return "Files in Remote Agent Directory";
+            return Messages.NodeRemoteDirectoryComponent_DisplayName();
         }
 
         /**

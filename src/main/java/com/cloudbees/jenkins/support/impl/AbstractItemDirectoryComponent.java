@@ -2,6 +2,7 @@ package com.cloudbees.jenkins.support.impl;
 
 import com.cloudbees.jenkins.support.api.Container;
 import com.cloudbees.jenkins.support.api.FileContent;
+import com.cloudbees.jenkins.support.api.PrintedContent;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.AbstractItem;
@@ -19,6 +20,7 @@ import org.kohsuke.stapler.QueryParameter;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.logging.Level;
 
 /**
@@ -40,18 +42,43 @@ public class AbstractItemDirectoryComponent extends DirectoryComponent<AbstractI
     public void addContents(@NonNull Container container, AbstractItem item) {
         try {
             list(item.getRootDir(), new FileVisitor() {
+
+                @Override
+                public void visitSymlink(File link, String target, String relativePath) throws IOException {
+                    container.add(new PrintedContent("items/{0}/{1}",
+                            item.getFullName(), relativePath) {
+
+                        @Override
+                        protected void printTo(PrintWriter out) {
+                            out.println("symlink -> " + target);
+                        }
+
+                        @Override
+                        public boolean shouldBeFiltered() {
+                            return false;
+                        }
+                    });
+                }
+
                 @Override
                 public void visit(File file, String s) throws IOException {
-                    container.add(new FileContent(
-                            "items/{0}/{1}",
-                            new String[]{item.getFullName(), s},
-                            file)
-                    );
+                    container.add(new FileContent("items/{0}/{1}", new String[]{item.getFullName(), s}, file));
+                }
+
+                @Override
+                public boolean understandsSymlink() {
+                    return true;
                 }
             });
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Could not list files from root directory of " + item.getFullName(), e);
         }
+    }
+
+    @NonNull
+    @Override
+    public String getDisplayName() {
+        return Messages.AbstractItemDirectoryComponent_DisplayName();
     }
 
     @Override
@@ -60,14 +87,14 @@ public class AbstractItemDirectoryComponent extends DirectoryComponent<AbstractI
     }
 
     @Extension
-    @Symbol("itemDirectoryComponent")
+    @Symbol("abstractItemDirectoryComponent")
     public static class DescriptorImpl extends DirectoryComponentsDescriptor<AbstractItem> {
 
         static final int DEFAULT_MAX_DEPTH = 2;
 
         public DescriptorImpl() {
             setIncludes("");
-            setExcludes("artifacts/**, jobs/**, branches/**");
+            setExcludes("**/artifacts/**, **/stashes/**");
             setDefaultExcludes(true);
             setMaxDepth(DEFAULT_MAX_DEPTH);
         }

@@ -8,6 +8,7 @@ import hudson.security.ACLContext;
 import hudson.util.DescribableList;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
+import org.jvnet.localizer.Localizable;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
@@ -62,6 +63,30 @@ public abstract class SupportObjectAction<T extends AbstractModelObject> impleme
     public void setComponents(List<? extends ObjectComponent<T>> components) {
         this.components = new ArrayList<>(components);
     }
+    
+    @SuppressWarnings("unused") // used by Stapler
+    public Localizable getActionTitle() {
+        SupportPlugin supportPlugin = SupportPlugin.getInstance();
+        if (supportPlugin != null) {
+            SupportProvider supportProvider = supportPlugin.getSupportProvider();
+            if (supportProvider != null) {
+                return supportProvider.getActionTitle();
+            }
+        }
+        return Messages._SupportObjectAction_DefaultActionTitle();
+    }
+
+    @SuppressWarnings("unused") // used by Stapler
+    public Localizable getActionBlurb() {
+        SupportPlugin supportPlugin = SupportPlugin.getInstance();
+        if (supportPlugin != null) {
+            SupportProvider supportProvider = supportPlugin.getSupportProvider();
+            if (supportProvider != null) {
+                return supportProvider.getActionBlurb();
+            }
+        }
+        return Messages._SupportObjectAction_DefaultActionBlurb();
+    }
 
     public List<? extends ObjectComponent<T>> getComponents() {
         return components;
@@ -99,9 +124,6 @@ public abstract class SupportObjectAction<T extends AbstractModelObject> impleme
         }
         LOGGER.fine("Parsing request...");
         List<ObjectComponent<T>> components = new ArrayList<>(parseRequest(req));
-//        List<ObjectComponent<T>> components = parseRequest(req, getObject().getClass()).stream()
-//                .peek(abstractComponent -> abstractComponent.setItem(object))
-//                .collect(Collectors.toList());
 
         rsp.addHeader("Content-Disposition", "inline; filename=" + SupportPlugin.getBundleFileName() + ";");
         

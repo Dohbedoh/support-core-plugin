@@ -2,6 +2,7 @@ package com.cloudbees.jenkins.support.impl;
 
 import com.cloudbees.jenkins.support.api.Container;
 import com.cloudbees.jenkins.support.api.FileContent;
+import com.cloudbees.jenkins.support.api.PrintedContent;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Run;
@@ -19,6 +20,7 @@ import org.kohsuke.stapler.QueryParameter;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.logging.Level;
 
 /**
@@ -41,6 +43,23 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
         try {
             String relativeToParentPath = item.getParent().getRootDir().toPath().relativize(item.getRootDir().toPath()).toString();
             list(item.getRootDir(), new FileVisitor() {
+
+                @Override
+                public void visitSymlink(File link, String target, String relativePath) throws IOException {
+                    container.add(new PrintedContent("items/{0}/{1}/{2}", 
+                            item.getParent().getFullName(), relativeToParentPath, relativePath) {
+                        @Override
+                        protected void printTo(PrintWriter out) {
+                            out.println("symlink -> " + target);
+                        }
+
+                        @Override
+                        public boolean shouldBeFiltered() {
+                            return false;
+                        }
+                    });
+                }
+                
                 @Override
                 public void visit(File file, String s) throws IOException {
                     container.add(new FileContent(
@@ -49,15 +68,26 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
                             file)
                     );
                 }
+
+                @Override
+                public boolean understandsSymlink() {
+                    return true;
+                }
             });
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Could not list files from root directory of " + item.getParent().getFullName() + "#" + item.getNumber(), e);
         }
     }
 
+    @NonNull
     @Override
-    public RunDirectoryComponent.DescriptorImpl getDescriptor() {
-        return Jenkins.get().getDescriptorByType(RunDirectoryComponent.DescriptorImpl.class);
+    public String getDisplayName() {
+        return Messages.RunDirectoryComponent_DisplayName();
+    }
+
+    @Override
+    public DescriptorImpl getDescriptor() {
+        return Jenkins.get().getDescriptorByType(DescriptorImpl.class);
     }
 
     @Extension
@@ -68,7 +98,7 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
 
         public DescriptorImpl() {
             setIncludes("");
-            setExcludes("artifacts/**");
+            setExcludes("**/artifacts/**, **/stashes/**");
             setDefaultExcludes(true);
             setMaxDepth(DEFAULT_MAX_DEPTH);
         }
@@ -79,7 +109,7 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
         @NonNull
         @Override
         public String getDisplayName() {
-            return "Files in Build Root Directory";
+            return Messages.RunDirectoryComponent_DisplayName();
         }
 
         /**

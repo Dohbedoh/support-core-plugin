@@ -25,11 +25,9 @@
 package com.cloudbees.jenkins.support.api;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
-import hudson.DescriptorExtensionList;
 import hudson.ExtensionPoint;
 import hudson.model.AbstractModelObject;
 import hudson.model.Describable;
-import hudson.model.Descriptor;
 import jenkins.model.Jenkins;
 
 import java.lang.reflect.ParameterizedType;
@@ -44,17 +42,17 @@ import java.util.stream.Collectors;
  * This is the unit of user consent; when creating a bundle for this object, the user would enable/disable
  * individual components.
  */
-public abstract class ObjectComponent<T extends AbstractModelObject> extends Component 
+public abstract class ObjectComponent<T extends AbstractModelObject> extends Component
         implements Describable<ObjectComponent<T>>, ExtensionPoint {
-    
+
     static final Logger LOGGER = Logger.getLogger(ObjectComponent.class.getName());
-    
+
     /**
      * {@inheritDoc}
      */
     @Override
     public ObjectComponentDescriptor<T> getDescriptor() {
-        return (ObjectComponentDescriptor<T>)Jenkins.get().getDescriptorOrDie(this.getClass());
+        return (ObjectComponentDescriptor<T>) Jenkins.get().getDescriptorOrDie(this.getClass());
     }
 
     @Override
@@ -64,18 +62,11 @@ public abstract class ObjectComponent<T extends AbstractModelObject> extends Com
 
     /**
      * Add contents from a specific item to a container
-     * 
+     *
      * @param container the {@link Container}
-     * @param item the item
+     * @param item      the item
      */
     public abstract void addContents(@NonNull Container container, T item);
-
-    /**
-     * All registered {@link Descriptor <ObjectComponent<?>>}s.
-     */
-    public static <T extends AbstractModelObject> DescriptorExtensionList<ObjectComponent<T>, ObjectComponentDescriptor<T>> all() {
-        return (DescriptorExtensionList) Jenkins.get().getDescriptorList(ObjectComponent.class);
-    }
 
     /**
      * All applicable {@link ObjectComponent}s for the class.
@@ -83,7 +74,7 @@ public abstract class ObjectComponent<T extends AbstractModelObject> extends Com
     public static <T extends AbstractModelObject> List<ObjectComponent<T>> allInstances(T item) {
         return Jenkins.get().getExtensionList(ObjectComponent.class).stream()
                 .filter(component -> component.isApplicable(item.getClass()))
-                .map(component -> ((ObjectComponent<T>)component))
+                .map(component -> ((ObjectComponent<T>) component))
                 .filter(component -> component.isApplicable(item))
                 .collect(Collectors.toList());
     }
@@ -94,7 +85,7 @@ public abstract class ObjectComponent<T extends AbstractModelObject> extends Com
     public static <T extends AbstractModelObject> List<ObjectComponentDescriptor<T>> for_(T item) {
         return Jenkins.get().getExtensionList(ObjectComponent.class).stream()
                 .filter(component -> component.isApplicable(item.getClass()))
-                .map(component -> ((ObjectComponent<T>)component))
+                .map(component -> ((ObjectComponent<T>) component))
                 .filter(component -> component.isApplicable(item))
                 .map(ObjectComponent::getDescriptor)
                 .collect(Collectors.toList());
@@ -111,7 +102,7 @@ public abstract class ObjectComponent<T extends AbstractModelObject> extends Com
 
     /**
      * Return if this component is applicable to a specific item.
-     * 
+     *
      * @param item the item
      * @return true if applicable
      */
@@ -121,6 +112,7 @@ public abstract class ObjectComponent<T extends AbstractModelObject> extends Com
 
     /**
      * Control if the component should be selected by default, based on the applicable item
+     *
      * @param item the item
      * @return true to select the component by default
      */

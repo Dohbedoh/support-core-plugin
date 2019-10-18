@@ -4,12 +4,17 @@ import com.cloudbees.jenkins.support.api.ObjectComponent;
 import com.cloudbees.jenkins.support.api.ObjectComponentDescriptor;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.ExtensionPoint;
+import hudson.Util;
 import hudson.model.AbstractModelObject;
 import hudson.security.Permission;
 import hudson.util.DirScanner;
 import hudson.util.FileVisitor;
 import hudson.util.FormValidation;
 import jenkins.model.Jenkins;
+import org.apache.commons.lang.ArrayUtils;
+import org.apache.tools.ant.DirectoryScanner;
+import org.apache.tools.ant.Project;
+import org.apache.tools.ant.types.FileSet;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.QueryParameter;
@@ -20,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Set;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 public abstract class DirectoryComponent<T extends AbstractModelObject> extends ObjectComponent<T> implements ExtensionPoint {
 
@@ -46,7 +52,7 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
     }
 
     protected final void list(File dir, FileVisitor visitor) throws IOException {
-        DirScanner scan = new DirScanner.Glob(getIncludes(), getExcludes(), getDefaultExcludes());
+        DirScanner scan = new DirGlobScanner(getIncludes(), getExcludes(), getDefaultExcludes(), false);
         scan.scan(dir, new FileVisitor() {
 
             @Override
@@ -54,6 +60,18 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
                 if (Paths.get(s).getNameCount() <= getMaxDepth()) {
                     visitor.visit(file, s);
                 }
+            }
+            
+            @Override
+            public void visitSymlink(File link, String target, String relativePath) throws IOException {
+                if (Paths.get(relativePath).getNameCount() <= getMaxDepth()) {
+                    visitor.visitSymlink(link, target, relativePath);
+                }
+            }
+
+            @Override
+            public boolean understandsSymlink() {
+                return true;
             }
         });
     }
@@ -168,6 +186,51 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
         @SuppressWarnings("unused") // used by Stapler
         public FormValidation doCheckMaxDepth(@QueryParameter String value) {
             return FormValidation.validatePositiveInteger(value);
+        }
+    }
+
+    public static class DirGlobScanner extends DirScanner {
+        
+        private final String includes;
+        private final String excludes;
+        private boolean useDefaultExcludes;
+        private boolean followSymlinks;
+        private static final long serialVersionUID = 1L;
+
+        public DirGlobScanner(String includes, 
+                              String excludes,
+                              boolean useDefaultExcludes, 
+                              boolean followSymlinks) {
+            this.includes = includes;
+            this.excludes = excludes;
+            this.useDefaultExcludes = useDefaultExcludes;
+            this.followSymlinks = followSymlinks;
+        }
+
+        public void scan(File dir, FileVisitor visitor) throws IOException {
+            if (Util.fixEmpty(this.includes) == null && this.excludes == null) {
+                (new DirScanner.Full()).scan(dir, visitor);
+            } else {
+                FileSet fs = Util.createFileSet(dir, this.includes, this.excludes);
+                fs.setDefaultexcludes(this.useDefaultExcludes);
+                fs.setFollowSymlinks(followSymlinks);
+                if (dir.exists()) {
+                    DirectoryScanner ds = fs.getDirectoryScanner(new Project());
+                    String[] var5 = (String [])ArrayUtils.addAll(ds.getIncludedFiles(), 
+                            Stream.of(ds.getNotFollowedSymlinks())
+                                    .map(s -> dir.toPath().relativize(Paths.get(s)).toString())
+                                    .toArray()
+                    );
+                    int var6 = var5.length;
+
+                    for(int var7 = 0; var7 < var6; ++var7) {
+                        String f = var5[var7];
+                        File file = new File(dir, f);
+                        this.scanSingle(file, f, visitor);
+                    }
+                }
+
+            }
         }
     }
 }
