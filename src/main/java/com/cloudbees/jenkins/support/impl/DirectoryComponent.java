@@ -45,6 +45,7 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
     }
 
     public DirectoryComponent(String includes, String excludes, boolean defaultExcludes, int maxDepth) {
+        super();
         setExcludes(excludes);
         setIncludes(includes);
         setDefaultExcludes(defaultExcludes);
@@ -208,16 +209,16 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
         }
 
         public void scan(File dir, FileVisitor visitor) throws IOException {
-            if (Util.fixEmpty(this.includes) == null && this.excludes == null) {
+            if (Util.fixEmpty(this.includes) == null && Util.fixEmpty(this.excludes) == null) {
                 (new DirScanner.Full()).scan(dir, visitor);
             } else {
-                FileSet fs = Util.createFileSet(dir, this.includes, this.excludes);
-                fs.setDefaultexcludes(this.useDefaultExcludes);
-                fs.setFollowSymlinks(followSymlinks);
+                FileSet fileSet = Util.createFileSet(dir, this.includes, this.excludes);
+                fileSet.setDefaultexcludes(this.useDefaultExcludes);
+                fileSet.setFollowSymlinks(followSymlinks);
                 if (dir.exists()) {
-                    DirectoryScanner ds = fs.getDirectoryScanner(new Project());
-                    String[] var5 = (String [])ArrayUtils.addAll(ds.getIncludedFiles(), 
-                            Stream.of(ds.getNotFollowedSymlinks())
+                    DirectoryScanner dirScanner = fileSet.getDirectoryScanner(new Project());
+                    String[] var5 = (String [])ArrayUtils.addAll(dirScanner.getIncludedFiles(), 
+                            Stream.of(dirScanner.getNotFollowedSymlinks())
                                     .map(s -> dir.toPath().relativize(Paths.get(s)).toString())
                                     .toArray()
                     );
