@@ -16,8 +16,6 @@ import java.util.logging.Logger;
  */
 public class SupportAbstractItemAction extends SupportObjectAction<AbstractItem> {
 
-    private final Logger logger = Logger.getLogger(SupportAbstractItemAction.class.getName());
-
     @DataBoundConstructor
     public SupportAbstractItemAction(AbstractItem target) {
         super(target);

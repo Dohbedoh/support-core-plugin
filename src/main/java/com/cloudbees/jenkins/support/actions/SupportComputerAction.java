@@ -17,8 +17,6 @@ import java.util.logging.Logger;
  */
 public class SupportComputerAction extends SupportObjectAction<Computer> {
 
-    private final Logger logger = Logger.getLogger(SupportComputerAction.class.getName());
-
     @DataBoundConstructor
     public SupportComputerAction(Computer target) {
         super(target);
