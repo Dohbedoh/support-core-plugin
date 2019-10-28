@@ -41,13 +41,14 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
     @Override
     public void addContents(@NonNull Container container, Run item) {
         try {
-            String relativeToParentPath = item.getParent().getRootDir().toPath().relativize(item.getRootDir().toPath()).toString();
-            list(item.getRootDir(), new FileVisitor() {
+            File itemRootDir = item.getRootDir();
+            String itemRelativeLocation = new File(Jenkins.get().getRootDir(), "jobs").toPath()
+                    .relativize(itemRootDir.toPath()).toString();
+            list(itemRootDir, new FileVisitor() {
 
                 @Override
                 public void visitSymlink(File link, String target, String relativePath) throws IOException {
-                    container.add(new PrintedContent("items/{0}/{1}/{2}", 
-                            item.getParent().getFullName(), relativeToParentPath, relativePath) {
+                    container.add(new PrintedContent("items/{0}/{1}", itemRelativeLocation, relativePath) {
                         @Override
                         protected void printTo(PrintWriter out) {
                             out.println("symlink -> " + target);
@@ -62,10 +63,7 @@ public class RunDirectoryComponent extends DirectoryComponent<Run> {
                 
                 @Override
                 public void visit(File file, String s) throws IOException {
-                    container.add(new FileContent(
-                            "items/{0}/{1}/{2}",
-                            new String[]{item.getParent().getFullName(), relativeToParentPath, s},
-                            file)
+                    container.add(new FileContent("items/{0}/{1}", new String[]{itemRelativeLocation, s}, file)
                     );
                 }
 

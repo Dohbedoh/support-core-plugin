@@ -41,12 +41,14 @@ public class AbstractItemDirectoryComponent extends DirectoryComponent<AbstractI
     @Override
     public void addContents(@NonNull Container container, AbstractItem item) {
         try {
-            list(item.getRootDir(), new FileVisitor() {
+            File itemRootDir = item.getRootDir();
+            String itemRelativeLocation = new File(Jenkins.get().getRootDir(), "jobs").toPath()
+                    .relativize(itemRootDir.toPath()).toString();
+            list(itemRootDir, new FileVisitor() {
 
                 @Override
                 public void visitSymlink(File link, String target, String relativePath) throws IOException {
-                    container.add(new PrintedContent("items/{0}/{1}",
-                            item.getFullName(), relativePath) {
+                    container.add(new PrintedContent("items/{0}/{1}", itemRelativeLocation, relativePath) {
 
                         @Override
                         protected void printTo(PrintWriter out) {
@@ -62,7 +64,7 @@ public class AbstractItemDirectoryComponent extends DirectoryComponent<AbstractI
 
                 @Override
                 public void visit(File file, String s) throws IOException {
-                    container.add(new FileContent("items/{0}/{1}", new String[]{item.getFullName(), s}, file));
+                    container.add(new FileContent("items/{0}/{1}", new String[]{itemRelativeLocation, s}, file));
                 }
 
                 @Override
