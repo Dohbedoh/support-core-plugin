@@ -90,13 +90,8 @@ public class AbstractItemDirectoryComponent extends DirectoryComponent<AbstractI
     @Symbol("abstractItemDirectoryComponent")
     public static class DescriptorImpl extends DirectoryComponentsDescriptor<AbstractItem> {
 
-        static final int DEFAULT_MAX_DEPTH = 2;
-
         public DescriptorImpl() {
-            setIncludes("");
-            setExcludes("**/artifacts/**, **/stashes/**");
-            setDefaultExcludes(true);
-            setMaxDepth(DEFAULT_MAX_DEPTH);
+            super("", "**/branches/**, **/jobs/**, **/artifacts/**, **/stashes/**", true, 5);
         }
 
         /**

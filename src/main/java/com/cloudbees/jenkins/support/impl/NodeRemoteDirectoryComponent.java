@@ -84,13 +84,8 @@ public class NodeRemoteDirectoryComponent extends DirectoryComponent<Computer> i
     @Symbol("nodeRemoteDirectoryComponent")
     public static class DescriptorImpl extends DirectoryComponentsDescriptor<Computer> {
 
-        static final int DEFAULT_MAX_DEPTH = 10;
-
         public DescriptorImpl() {
-            setIncludes("");
-            setExcludes("workspace/**, remoting/jarCache/**");
-            setDefaultExcludes(true);
-            setMaxDepth(DEFAULT_MAX_DEPTH);
+            super("", "workspace/**, remoting/jarCache/**", true, 10);
         }
 
         /**
