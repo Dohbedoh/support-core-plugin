@@ -3,6 +3,7 @@ package com.cloudbees.jenkins.support.impl;
 import com.cloudbees.jenkins.support.api.*;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
+import hudson.model.AbstractModelObject;
 import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.remoting.Channel;
@@ -86,11 +87,11 @@ public class DumpExportTable extends ObjectComponent<Computer> {
                 }
         ));
     }
-
-//  @Override
-//  public <C extends AbstractModelObject> boolean isApplicable(Class<C> clazz) {
-//    return Computer.class.isAssignableFrom(clazz);
-//  }
+    
+    @Override
+    public <C extends AbstractModelObject> boolean isApplicable(Class<C> clazz) {
+        return Jenkins.class.isAssignableFrom(clazz) || Computer.class.isAssignableFrom(clazz);
+    }
 
     @Override
     protected boolean isApplicable(Computer item) {
