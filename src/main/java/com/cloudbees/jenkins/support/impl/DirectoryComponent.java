@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
@@ -136,10 +137,19 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
         private int maxDepth;
 
         public DirectoryComponentsDescriptor() {
+            super();
             setExcludes("");
             setIncludes("");
             setMaxDepth(DEFAULT_MAX_DEPTH);
             setDefaultExcludes(true);
+        }
+
+        public DirectoryComponentsDescriptor(String includes, String excludes, boolean defaultExcludes, int maxDepth) {
+            super();
+            setExcludes(excludes);
+            setIncludes(includes);
+            setDefaultExcludes(defaultExcludes);
+            setMaxDepth(maxDepth);
         }
 
         /**
@@ -207,30 +217,27 @@ public abstract class DirectoryComponent<T extends AbstractModelObject> extends 
             this.useDefaultExcludes = useDefaultExcludes;
             this.followSymlinks = followSymlinks;
         }
-
+        
         public void scan(File dir, FileVisitor visitor) throws IOException {
-            if (Util.fixEmpty(this.includes) == null && Util.fixEmpty(this.excludes) == null) {
-                (new DirScanner.Full()).scan(dir, visitor);
-            } else {
-                FileSet fileSet = Util.createFileSet(dir, this.includes, this.excludes);
-                fileSet.setDefaultexcludes(this.useDefaultExcludes);
-                fileSet.setFollowSymlinks(followSymlinks);
-                if (dir.exists()) {
-                    DirectoryScanner dirScanner = fileSet.getDirectoryScanner(new Project());
-                    String[] var5 = (String [])ArrayUtils.addAll(dirScanner.getIncludedFiles(), 
-                            Stream.of(dirScanner.getNotFollowedSymlinks())
-                                    .map(s -> dir.toPath().relativize(Paths.get(s)).toString())
-                                    .toArray()
-                    );
-                    int var6 = var5.length;
+            FileSet fileSet = Util.createFileSet(dir,
+                    Optional.ofNullable(Util.fixEmpty(this.includes)).orElse("**/*"),
+                    Optional.ofNullable(Util.fixEmpty(this.excludes)).orElse(""));
+            fileSet.setDefaultexcludes(this.useDefaultExcludes);
+            fileSet.setFollowSymlinks(followSymlinks);
+            if (dir.exists()) {
+                DirectoryScanner dirScanner = fileSet.getDirectoryScanner(new Project());
+                String[] var5 = (String[]) ArrayUtils.addAll(dirScanner.getIncludedFiles(),
+                        Stream.of(dirScanner.getNotFollowedSymlinks())
+                                .map(s -> dir.toPath().relativize(Paths.get(s)).toString())
+                                .toArray()
+                );
+                int var6 = var5.length;
 
-                    for(int var7 = 0; var7 < var6; ++var7) {
-                        String f = var5[var7];
-                        File file = new File(dir, f);
-                        this.scanSingle(file, f, visitor);
-                    }
+                for (int var7 = 0; var7 < var6; ++var7) {
+                    String f = var5[var7];
+                    File file = new File(dir, f);
+                    this.scanSingle(file, f, visitor);
                 }
-
             }
         }
     }
