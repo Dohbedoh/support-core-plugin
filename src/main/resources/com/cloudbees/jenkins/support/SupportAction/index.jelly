@@ -25,78 +25,92 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:l="/lib/layout"
          xmlns:f="/lib/form">
   <l:layout title="${it.actionTitleText}" norefresh="true" permission="${it.CREATE_BUNDLE}">
-    <st:include page="sidepanel.jelly" it="${app}"/>
+    <l:side-panel>
+      <l:tasks>
+        <l:task icon="images/24x24/up.gif" href="${rootURL}/" title="${%Back to Dashboard}" />
+        <l:task icon="${resURL}/plugin/support-core/images/32x32/support.png" href="?action=bundleGeneration" title="${%Generate Support Bundle}" />
+        <l:task icon="${resURL}/plugin/support-core/images/24x24/support.png" href="?action=bundlesManagement" title="${%Manage Existing Support Bundles}" />
+      </l:tasks>
+    </l:side-panel>
     <l:main-panel>
-      <h1>
-        <img src="${resURL}/plugin/support-core/images/32x32/support.png" alt=""/>
-        ${it.actionTitle}
-      </h1>
-      <p>
-        ${it.actionBlurb}
-      </p>
-      <p>
-        ${%detail}
-      </p>
-      <j:if test="${it.anonymized}">
-        <p>
-          Support bundle anonymization is enabled. View
-          <a href="../anonymizedMappings">anonymized mappings here</a>, or manage anonymization settings in the
-          <a href="${rootURL}/configureSecurity">global security</a> under <i>Support Bundle Anonymization</i>.
-        </p>
-      </j:if>
-      <j:if test="${!it.anonymized}">
-        <p class="warning">
-          Support bundle anonymization is disabled. This can be enabled in the
-          <a href="${rootURL}/configureSecurity">global security</a> under <i>Support Bundle Anonymization</i>.
-        </p>
-      </j:if>
-      <f:form name="bundle-contents" method="POST" action="generateAllBundles">
-        <j:forEach var="component" items="${it.components}">
-          <f:entry field="component">
-            <div name="components">
-              <j:if test="${component.enabled}">
-                <f:checkbox name="selected" checked="${it.selectedByDefault(component)}"
-                            title="${component.displayName}"/>
-              </j:if>
-              <j:if test="${!component.enabled}">
-                <input type="checkbox"
-                       name="selected"
-                       value="false"
-                       disabled="disabled"/>
-                <label class="attach-previous" style="text-decoration: line-through;"
-                       title="${%permissionPreReqs(component.displayPermissions)}">${component.displayName}
-                </label>
-              </j:if>
-              <input style="display:none" name="name" value="${component.id}"/>
-            </div>
-          </f:entry>
-        </j:forEach>
-        <f:entry>
-          <f:submit value="${%Generate Bundle}"/>
-        </f:entry>
-      </f:form>
-      <f:section title="${%Existing support bundles}">
+      <j:set var="action" value="${request.getParameter('action')}"/>
+      <j:set var="action" value="${action == null ? 'bundleGeneration' : action}"/>
+      <j:choose>
+        <j:when test="${action == 'bundlesManagement'}">
+          <h1>${%Support Bundle Management}</h1>
+          <f:section title="${%Existing support bundles}">
 
-      <f:form name="bundle-contents" method="POST" action="deleteBundles">
-        <j:forEach var="bundle" items="${it.bundles}">
-          <f:entry field="bundle">
-          <div name="bundles">
-          <f:checkbox name="selected" checked="false"
-                      title="${bundle}"/>
-            <input style="display:none" name="name" value="${bundle}"/>
-          </div>
-          </f:entry>
-        </j:forEach>
-        <f:entry>
-          <span class="yui-button yui-submit-button submit-button danger">
-            <span class="first-child">
-              <button type="submit">${%Delete Bundle}</button>
-            </span>
-          </span>
-        </f:entry>
-      </f:form>
-      </f:section>
-
+            <f:form name="bundle-contents" method="POST" action="deleteBundles">
+              <j:forEach var="bundle" items="${it.bundles}">
+                <f:entry field="bundle">
+                  <div name="bundles">
+                    <f:checkbox name="selected" checked="false"
+                                title="${bundle}"/>
+                    <input style="display:none" name="name" value="${bundle}"/>
+                  </div>
+                </f:entry>
+              </j:forEach>
+              <f:entry>
+                <span class="yui-button yui-submit-button submit-button danger">
+                  <span class="first-child">
+                    <button type="submit">${%Delete Bundle}</button>
+                  </span>
+                </span>
+              </f:entry>
+            </f:form>
+          </f:section>
+        </j:when>
+        <j:otherwise>
+          <h1>
+            <img src="${resURL}/plugin/support-core/images/32x32/support.png" alt=""/>
+            ${it.actionTitle}
+          </h1>
+          <p>
+            ${it.actionBlurb}
+          </p>
+          <p>
+            ${%detail}
+          </p>
+          <j:if test="${it.anonymized}">
+            <p>
+              Support bundle anonymization is enabled. View
+              <a href="../anonymizedMappings">anonymized mappings here</a>, or manage anonymization settings in the
+              <a href="${rootURL}/configureSecurity">global security</a> under <i>Support Bundle Anonymization</i>.
+            </p>
+          </j:if>
+          <j:if test="${!it.anonymized}">
+            <p class="warning">
+              Support bundle anonymization is disabled. This can be enabled in the
+              <a href="${rootURL}/configureSecurity">global security</a> under <i>Support Bundle Anonymization</i>.
+            </p>
+          </j:if>
+          <f:form name="bundle-contents" method="POST" action="generateAllBundles">
+            <j:forEach var="component" items="${it.components}">
+              <f:entry field="component">
+                <div name="components">
+                  <j:if test="${component.enabled}">
+                    <f:checkbox name="selected" checked="${it.selectedByDefault(component)}"
+                                title="${component.displayName}"/>
+                  </j:if>
+                  <j:if test="${!component.enabled}">
+                    <input type="checkbox"
+                           name="selected"
+                           value="false"
+                           disabled="disabled"/>
+                    <label class="attach-previous" style="text-decoration: line-through;"
+                           title="${%permissionPreReqs(component.displayPermissions)}">${component.displayName}
+                    </label>
+                  </j:if>
+                  <input style="display:none" name="name" value="${component.id}"/>
+                </div>
+              </f:entry>
+            </j:forEach>
+            <f:entry>
+              <f:submit value="${%Generate Bundle}"/>
+            </f:entry>
+          </f:form>
+        </j:otherwise>
+      </j:choose>
     </l:main-panel>
   </l:layout>
 </j:jelly>
