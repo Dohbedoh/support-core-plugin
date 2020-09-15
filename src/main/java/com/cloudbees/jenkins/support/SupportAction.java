@@ -25,8 +25,10 @@
 package com.cloudbees.jenkins.support;
 
 import com.cloudbees.jenkins.support.api.Component;
+import com.cloudbees.jenkins.support.api.SupportContentContributor;
 import com.cloudbees.jenkins.support.api.SupportProvider;
 import com.cloudbees.jenkins.support.filter.ContentFilters;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
 import hudson.model.Api;
 import hudson.model.RootAction;
@@ -35,7 +37,6 @@ import hudson.security.ACLContext;
 import hudson.security.Permission;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
-
 import org.apache.commons.io.FileUtils;
 import org.jvnet.localizer.Localizable;
 import org.kohsuke.accmod.Restricted;
@@ -57,9 +58,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -161,17 +162,16 @@ public class SupportAction implements RootAction, StaplerProxy {
               ));
     }
 
-    public List<String> getBundles() {
-        List<String> res = new ArrayList<>();
-        File rootDirectory = SupportPlugin.getRootDirectory();
-        File[] bundlesFiles = rootDirectory.listFiles((dir, name) -> name.endsWith(".zip") || name.endsWith(".log"));
-        if (bundlesFiles != null) {
-            for (File bundleFile : bundlesFiles) {
-                res.add(bundleFile.getName());
-            }
-        }
-        Collections.sort(res);
-        return res;
+    public List<SupportContentContributor> getContentContributors() {
+        return Jenkins.get().getExtensionList(SupportContentContributor.class).stream()
+            .sorted(Comparator.comparing(SupportContentContributor::getContributorName)).collect(Collectors.toList());
+    }
+
+    @CheckForNull
+    public SupportContentContributor getContentContributor(String id) {
+        return getContentContributors().stream()
+            .filter(contentGenerator -> contentGenerator.getContributorId().equals(id))
+            .findFirst().orElse(null);
     }
 
     /**
@@ -186,90 +186,112 @@ public class SupportAction implements RootAction, StaplerProxy {
     }
 
     @RequirePOST
-    public void doDeleteBundles(StaplerRequest req, StaplerResponse rsp) throws ServletException, IOException {
+    @SuppressWarnings("unused") // Used by Stapler
+    public void doDeleteFiles(StaplerRequest req, StaplerResponse rsp) throws ServletException, IOException {
+
+        Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
         JSONObject json = req.getSubmittedForm();
-        if (!json.has("bundles")) {
+        if (!json.has("contentContributorId")) {
             rsp.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
-        Set<String> bundlesToDelete = getSelectedBundles(req, json);
-        File rootDirectory = SupportPlugin.getRootDirectory();
-        for(String bundleToDelete : bundlesToDelete) {
-            File fileToDelete = new File(rootDirectory, bundleToDelete);
-            logger.fine("Trying to delete bundle file "+ fileToDelete.getAbsolutePath());
+
+        String componentKey = json.getString("contentContributorId");
+        SupportContentContributor supportContentContributor = getContentContributor(componentKey);
+        if (supportContentContributor == null) {
+            rsp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown support content type: " + componentKey);
+            return;
+        }
+
+        List<File> filesToDelete = getSelectedFiles(req.bindJSONToList(SupportAction.Selection.class, json.get("files")), supportContentContributor);
+        for (File fileToDelete : filesToDelete) {
+            logger.fine("Trying to delete file " + fileToDelete.getAbsolutePath());
             try {
                 if (fileToDelete.delete()) {
-                    logger.info("Bundle " + fileToDelete.getAbsolutePath() + " successfully deleted.");
+                    logger.info("File " + fileToDelete.getAbsolutePath() + " successfully deleted.");
                 } else {
                     logger.log(Level.SEVERE, "Unable to delete file " + fileToDelete.getAbsolutePath());
                 }
             } catch (RuntimeException e) {
-                    logger.log(Level.SEVERE, "Unable to delete file " + fileToDelete.getAbsolutePath(), e);
+                logger.log(Level.SEVERE, "Unable to delete file " + fileToDelete.getAbsolutePath(), e);
             }
         }
         rsp.sendRedirect("generatedSupportContent");
     }
 
     @RequirePOST
-    public void doDownloadBundles(StaplerRequest req, StaplerResponse rsp) throws ServletException, IOException {
+    @SuppressWarnings("unused") // Used by Stapler
+    public void doDownloadFiles(StaplerRequest req, StaplerResponse rsp) throws ServletException, IOException {
+
+        Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
         JSONObject json = req.getSubmittedForm();
-        if (!json.has("bundles")) {
+        if (!json.has("contentContributorId")) {
             rsp.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
 
-        Set<String> bundlesToDownload = getSelectedBundles(req, json);
-        File fileToDownload = null;
-        if (bundlesToDownload.size() > 1) {
-            // more than one bundles were selected, create a zip file
-            fileToDownload = createZipFile(bundlesToDownload);
-        } else {
-            fileToDownload = new File(SupportPlugin.getRootDirectory(), bundlesToDownload.iterator().next());
+        String componentKey = json.getString("contentContributorId");
+        SupportContentContributor supportContentContributor = getContentContributor(componentKey);
+        if (supportContentContributor == null) {
+            rsp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown support content type: " + componentKey);
+            return;
         }
-        logger.fine("Trying to download file "+ fileToDownload.getAbsolutePath());
+
+        List<File> filesToDownload = getSelectedFiles(req.bindJSONToList(SupportAction.Selection.class, json.get("files")), supportContentContributor);
+        File fileToDownload;
+        if (filesToDownload.size() == 0) {
+            rsp.sendError(HttpServletResponse.SC_BAD_REQUEST, "No file selected");
+            return;
+        } else if (filesToDownload.size() == 1) {
+            fileToDownload = filesToDownload.iterator().next();
+        } else {
+            // more than one file were selected, create a zip file
+            fileToDownload = createZipFile(filesToDownload);
+        }
+        logger.fine("Trying to download file " + fileToDownload.getAbsolutePath());
         try {
             rsp.setContentType("application/zip");
             rsp.addHeader("Content-Disposition", "inline; filename=" + fileToDownload.getName() + ";");
             FileUtils.copyFile(fileToDownload, rsp.getOutputStream());
-            logger.info("Bundle " + fileToDownload.getAbsolutePath() + " successfully downloaded");
+            logger.info("File " + fileToDownload.getAbsolutePath() + " successfully downloaded");
         } catch (RuntimeException e) {
             logger.log(Level.SEVERE, "Unable to download file " + fileToDownload.getAbsolutePath(), e);
         } finally {
-            if (bundlesToDownload.size() > 1) {
+            if (filesToDownload.size() > 1) {
                 if (fileToDownload.delete()) {
-                    logger.log(Level.FINE, "Temporary multiBundle file deleted: " + fileToDownload.getAbsolutePath());
+                    logger.log(Level.FINE, "Temporary multi bundle deleted: " + fileToDownload.getAbsolutePath());
                 } else {
-                    logger.log(Level.SEVERE, "Unable to delete temporary multiBundle file: " + fileToDownload.getAbsolutePath());
+                    logger.log(Level.SEVERE, "Unable to delete temporary multi bundle archive: " + fileToDownload.getAbsolutePath());
                 }
             }
         }
     }
 
-    private Set<String> getSelectedBundles(StaplerRequest req, JSONObject json) throws ServletException, IOException {
-        Set<String> bundles = new HashSet<>();
-        List<String> existingBundles = getBundles();
-        for (Selection s : req.bindJSONToList(Selection.class, json.get("bundles"))) {
+    private List<File> getSelectedFiles(List<SupportAction.Selection> selections, SupportContentContributor supportContentContributor) {
+        List<File> files = new ArrayList<>();
+        List<File> existingFiles = supportContentContributor.getFiles();
+        for (SupportAction.Selection s : selections) {
             if (s.isSelected()) {
-                if (existingBundles.contains(s.getName())) {
-                    bundles.add(s.getName());
+                if (existingFiles.stream().anyMatch(file -> file.getName().equals(s.getName()))) {
+                    files.add(Paths.get(supportContentContributor.getDirPath().getAbsolutePath(), s.getName()).toFile());
                 } else {
-                    logger.log(Level.FINE, "The bundle selected {0} does not exist, so it will not be processed", s.getName());
+                    logger.log(Level.FINE, "The file selected {0} does not exist, so it will not be processed", s.getName());
                 }
             }
         }
-        return bundles;
+        return files;
     }
 
-    private File createZipFile(Set<String> bundles) throws IOException {
-        File rootDirectory = SupportPlugin.getRootDirectory();
+    private File createZipFile(List<File> files) throws IOException {
         File zipFile = File.createTempFile(
-            String.format("multiBundle(%s)-", bundles.size()), ".zip");
+            String.format("multi(%s)-", files.size()), ".zip");
         zipFile.deleteOnExit();
         try(FileOutputStream fos = new FileOutputStream(zipFile);
             ZipOutputStream zos = new ZipOutputStream(fos)) {
             byte[] buffer = new byte[1024]; 
-            for (String bundle: bundles) {
-                File file = new File(rootDirectory, bundle);
+            for (File file: files) {
                 try(FileInputStream fis = new FileInputStream(file)) {
                     zos.putNextEntry(new ZipEntry(file.getName()));
                     int length;
