@@ -1,6 +1,6 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:l="/lib/layout">
-  <l:layout title="${it.actionTitleText}" norefresh="true" permission="${it.CREATE_BUNDLE}">
+  <l:layout title="${it.actionTitleText}" norefresh="true" permission="${app.ADMINISTER}">
     <st:include page="sidepanel.jelly"/>
     <l:main-panel/>
   </l:layout>

@@ -1,28 +1,39 @@
 package com.cloudbees.jenkins.support.timer;
 
 import com.cloudbees.jenkins.support.SupportPlugin;
+import com.cloudbees.jenkins.support.api.SupportContentContributor;
 import com.cloudbees.jenkins.support.filter.ContentFilter;
 import com.cloudbees.jenkins.support.impl.ThreadDumps;
+import com.cloudbees.jenkins.support.slowrequest.SlowRequestChecker;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.PeriodicWork;
 import jenkins.model.Jenkins;
+import jenkins.util.SystemProperties;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
-import java.util.Optional;
+import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * @author Steven Chrisou
  */
 @Extension
-public class DeadlockTrackChecker extends PeriodicWork {
+public class DeadlockTrackChecker extends PeriodicWork implements SupportContentContributor {
+    
+    private static final String DEADLOCKS_PATH_PROPERTY = SlowRequestChecker.class.getName() + ".deadlocksDir";
 
     final SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd-HHmmss");
     {
@@ -67,6 +78,39 @@ public class DeadlockTrackChecker extends PeriodicWork {
                 builder.close();
             }
         }
+    }
+
+    @NonNull
+    @Override
+    public File getDirPath() {
+        String dirPath = SystemProperties.getString(DEADLOCKS_PATH_PROPERTY);
+        return dirPath == null
+            ? new File(Jenkins.get().getRootDir(), "deadlocks")
+            : new File(dirPath);
+    }
+
+    @CheckForNull
+    @Override
+    public FilenameFilter getFilenameFilter() {
+        return (dir, name) -> name.startsWith("DeadlockDetected-") && name.endsWith(".txt");
+    }
+
+    @NonNull
+    @Override
+    public String getContributorId() {
+        return this.getClass().getSimpleName();
+    }
+
+    @NonNull
+    @Override
+    public String getContributorName() {
+        return "Deadlocks";
+    }
+
+    @NonNull
+    @Override
+    public String getContributorDescription() {
+        return "Thread deadlocks dump generated when a thread deadlock is detected";
     }
 }
 
