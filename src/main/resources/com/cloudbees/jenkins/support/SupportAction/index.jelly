@@ -28,8 +28,8 @@
     <l:side-panel>
       <l:tasks>
         <l:task icon="images/24x24/up.gif" href="${rootURL}/" title="${%Back to Dashboard}" />
-        <l:task icon="${resURL}/plugin/support-core/images/32x32/support.png" href="?action=bundleGeneration" title="${%Generate Support Bundle}" />
-        <l:task icon="${resURL}/plugin/support-core/images/24x24/support.png" href="?action=bundlesManagement" title="${%Manage Existing Support Bundles}" />
+        <l:task icon="/plugin/support-core/images/24x24/support.png" href="?action=bundleGeneration" title="${%Generate Support Bundle}" />
+        <l:task icon="/plugin/support-core/images/24x24/support.png" href="?action=bundlesManagement" title="${%Manage Existing Support Bundles}" />
       </l:tasks>
     </l:side-panel>
     <l:main-panel>
