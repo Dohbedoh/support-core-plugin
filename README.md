@@ -2,6 +2,8 @@
 
 [![Jenkins](https://ci.jenkins.io/job/Plugins/job/support-core-plugin/job/master/badge/icon)](https://ci.jenkins.io/job/Plugins/job/support-core-plugin/job/master/)
 [![Jenkins Plugin](https://img.shields.io/jenkins/plugin/v/support-core.svg)](https://plugins.jenkins.io/support-core)
+[![Jenkins Plugin Installs](https://img.shields.io/jenkins/plugin/i/support-core.svg?color=blue&label=installations)](https://github.com/jenkinsci/support-core-plugin/graphs/contributors)
+[![Jenkins Plugin Release](https://img.shields.io/github/release/jenkinsci/support-core-plugin.svg?label=changelog)](https://github.com/jenkinsci/support-core-plugin/releases/latest)
 
 ## Introduction
 
