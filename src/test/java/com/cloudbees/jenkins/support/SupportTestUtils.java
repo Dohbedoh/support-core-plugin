@@ -91,6 +91,37 @@ public class SupportTestUtils {
     }
 
     /**
+     * Invoke a component, and return the component contents as a Map.
+     */
+    public static Map<String, String> invokeComponentToMap(final Component component) {
+
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        final Map<String, String> contents = new TreeMap<>();
+        component.addContents(
+            new Container() {
+                @Override
+                public void add(@CheckForNull Content content) {
+                    try {
+                        Objects.requireNonNull(content).writeTo(baos);
+                        contents.put(
+                            SupportPlugin.getNameFiltered(
+                                SupportPlugin.getContentFilter(),
+                                content.getName(),
+                                content.getFilterableParameters()
+                            ),
+                            baos.toString());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } finally {
+                        baos.reset();
+                    }
+                }
+            });
+
+        return contents;
+    }
+
+    /**
      * Invoke an object component, and return the component contents as a String.
      */
     public static <T extends AbstractModelObject> Map<String, String> invokeComponentToMap(
