@@ -62,7 +62,9 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
@@ -86,7 +88,7 @@ public class AboutJenkins extends Component {
 
     private final WeakHashMap<Node,String> agentVersionCache = new WeakHashMap<Node, String>();
 
-    private final WeakHashMap<Node,String> javaInfoCache = new WeakHashMap<Node, String>();
+    private final WeakHashMap<Node, Map<String, String>> javaInfoCache = new WeakHashMap<Node, Map<String, String>>();
 
     private final WeakHashMap<Node,String> agentDigestCache = new WeakHashMap<Node, String>();
 
@@ -198,120 +200,124 @@ public class AboutJenkins extends Component {
             }
         }
     }
+    
+    private static String javaInfoToString(ContentFilter filter, Map<String, String> javaInfo, String majorBullet, String minorBullet) {
+        StringBuilder result = new StringBuilder();
 
-    private static class GetJavaInfo extends MasterToSlaveCallable<String, RuntimeException> {
+        result.append(majorBullet).append("Java\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("java.main"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        result.append(majorBullet).append("Java Runtime Specification\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("java.runtime"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        result.append(majorBullet).append("JVM Specification\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("java.specification"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        result.append(majorBullet).append("JVM Implementation\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("java.implementation"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        result.append(majorBullet).append("Operating system\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("os"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("process"))
+            .forEach(entry -> result.append(majorBullet).append(entry.getValue()).append("\n"));
+
+        result.append(majorBullet).append("JVM startup parameters:\n");
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("classpaths"))
+            .forEach(entry -> result.append(minorBullet).append(entry.getValue()).append("\n"));
+
+        javaInfo.entrySet().stream().filter(entry -> entry.getKey().startsWith("arguments"))
+            .forEach(entry -> result.append(minorBullet).append(ContentFilter.filter(filter, entry.getValue())).append("\n"));
+        return result.toString();
+    }
+
+    private static class GetJavaInfo extends MasterToSlaveCallable<Map<String, String>, RuntimeException> {
         private static final long serialVersionUID = 1L;
-        private final String maj;
-        private final String min;
 
-        private GetJavaInfo(String majorBullet, String minorBullet) {
-            this.maj = majorBullet;
-            this.min = minorBullet;
+        private GetJavaInfo() {}
+
+        public Map<String, String> call() throws RuntimeException {
+            return getInfo();
         }
 
-        public String call() throws RuntimeException {
-            return getInfo(null);
-        }
+        private Map<String, String> getInfo() {
 
-        /**
-         * Method used to retrieve the info filtered if a filter is set. When used in a node, from the {@link #call()}
-         * method, the filter is not passed because it's not going to work in a node through remote.
-         * because it doesn't work in an agent.
-         * @param filter the filter to use.
-         * @return the Java information.
-         */
-        @SuppressFBWarnings("DMI_HARDCODED_ABSOLUTE_FILENAME")
-        private String getInfo(ContentFilter filter) {
-            StringBuilder result = new StringBuilder();
+            Map<String, String> result = new LinkedHashMap<>();
             Runtime runtime = Runtime.getRuntime();
-            result.append(maj).append(" Java\n");
-            result.append(min).append(" Home:           `").append(
-                    Markdown.escapeBacktick(System.getProperty("java.home"))).append("`\n");
-            result.append(min).append(" Vendor:           ").append(
-                    Markdown.escapeUnderscore(System.getProperty("java.vendor"))).append("\n");
-            result.append(min).append(" Version:          ").append(
-                    Markdown.escapeUnderscore(System.getProperty("java.version"))).append("\n");
+            result.put("java.main.home",    "Home:           `" + Markdown.escapeBacktick(System.getProperty("java.home")) + "`");
+            result.put("java.main.vendor",  "Vendor:           " + Markdown.escapeUnderscore(System.getProperty("java.vendor")));
+            result.put("java.main.version", "Version:          " + Markdown.escapeUnderscore(System.getProperty("java.version")));
             long maxMem = runtime.maxMemory();
             long allocMem = runtime.totalMemory();
             long freeMem = runtime.freeMemory();
-            result.append(min).append(" Maximum memory:   ").append(humanReadableSize(maxMem)).append("\n");
-            result.append(min).append(" Allocated memory: ").append(humanReadableSize(allocMem))
-                    .append("\n");
-            result.append(min).append(" Free memory:      ").append(humanReadableSize(freeMem)).append("\n");
-            result.append(min).append(" In-use memory:    ").append(humanReadableSize(allocMem - freeMem)).append("\n");
+            result.put("java.main.max.memory", "Maximum memory:   "+ humanReadableSize(maxMem));
+            result.put("java.main.allocated.memory", "Allocated memory: " +  humanReadableSize(allocMem));
+            result.put("java.main.free.memory", "Free memory:      " + humanReadableSize(freeMem));
+            result.put("java.main.in-use.memory", "In-use memory:    " + humanReadableSize(allocMem - freeMem));
 
-            for(MemoryPoolMXBean bean : ManagementFactory.getMemoryPoolMXBeans()) {
+            for (MemoryPoolMXBean bean : ManagementFactory.getMemoryPoolMXBeans()) {
                 if (bean.getName().toLowerCase().contains("perm gen")) {
                     MemoryUsage currentUsage = bean.getUsage();
-                    result.append(min).append(" PermGen used:     ").append(humanReadableSize(currentUsage.getUsed())).append("\n");
-                    result.append(min).append(" PermGen max:      ").append(humanReadableSize(currentUsage.getMax())).append("\n");
+                    result.put("java.main.permgen.used", "PermGen used:     " + humanReadableSize(currentUsage.getUsed()));
+                    result.put("java.main.permgen.max", "PermGen max:      " + humanReadableSize(currentUsage.getMax()));
                     break;
                 }
             }
 
-            for(MemoryManagerMXBean bean : ManagementFactory.getMemoryManagerMXBeans()) {
+            for (MemoryManagerMXBean bean : ManagementFactory.getMemoryManagerMXBeans()) {
                 if (bean.getName().contains("MarkSweepCompact")) {
-                    result.append(min).append(" GC strategy:      SerialGC\n");
+                    result.put("java.main.gc.strategy", "GC strategy:      SerialGC");
                     break;
                 }
                 if (bean.getName().contains("ConcurrentMarkSweep")) {
-                    result.append(min).append(" GC strategy:      ConcMarkSweepGC\n");
+                    result.put("java.main.gc.strategy", "GC strategy:      ConcMarkSweepGC");
                     break;
                 }
                 if (bean.getName().contains("PS")) {
-                    result.append(min).append(" GC strategy:      ParallelGC\n");
+                    result.put("java.main.gc.strategy", "GC strategy:      ParallelGC");
                     break;
                 }
                 if (bean.getName().contains("G1")) {
-                    result.append(min).append(" GC strategy:      G1\n");
+                    result.put("java.main.gc.strategy", "GC strategy:      G1");
                     break;
                 }
             }
-            result.append(min).append(" Available CPUs:   ").append(runtime.availableProcessors()).append("\n");
+            result.put("java.main.cpu.available", "Available CPUs:   " + runtime.availableProcessors());
 
-            result.append(maj).append(" Java Runtime Specification\n");
-            result.append(min).append(" Name:    ").append(System.getProperty("java.specification.name")).append("\n");
-            result.append(min).append(" Vendor:  ").append(System.getProperty("java.specification.vendor"))
-                    .append("\n");
-            result.append(min).append(" Version: ").append(System.getProperty("java.specification.version"))
-                    .append("\n");
-            result.append(maj).append(" JVM Specification\n");
-            result.append(min).append(" Name:    ").append(System.getProperty("java.vm.specification.name"))
-                    .append("\n");
-            result.append(min).append(" Vendor:  ").append(System.getProperty("java.vm.specification.vendor"))
-                    .append("\n");
-            result.append(min).append(" Version: ").append(System.getProperty("java.vm.specification.version"))
-                    .append("\n");
-            result.append(maj).append(" JVM Implementation\n");
-            result.append(min).append(" Name:    ").append(
-                    Markdown.escapeUnderscore(System.getProperty("java.vm.name"))).append("\n");
-            result.append(min).append(" Vendor:  ").append(
-                    Markdown.escapeUnderscore(System.getProperty("java.vm.vendor"))).append("\n");
-            result.append(min).append(" Version: ").append(
-                    Markdown.escapeUnderscore(System.getProperty("java.vm.version"))).append("\n");
-            result.append(maj).append(" Operating system\n");
-            result.append(min).append(" Name:         ").append(
-                    Markdown.escapeUnderscore(System.getProperty("os.name"))).append("\n");
-            result.append(min).append(" Architecture: ").append(
-                    Markdown.escapeUnderscore(System.getProperty("os.arch"))).append("\n");
-            result.append(min).append(" Version:      ").append(
-                    Markdown.escapeUnderscore(System.getProperty("os.version"))).append("\n");
+            result.put("java.runtime.name", "Name:    " + System.getProperty("java.specification.name"));
+            result.put("java.runtime.vendor", "Vendor:  " + System.getProperty("java.specification.vendor"));
+            result.put("java.runtime.version", "Version: " + System.getProperty("java.specification.version"));
+
+            result.put("java.specification.name", "Name:    " + System.getProperty("java.vm.specification.name"));
+            result.put("java.specification.vendor", "Vendor:  " + System.getProperty("java.vm.specification.vendor"));
+            result.put("java.specification.version", "Version: " + System.getProperty("java.vm.specification.version"));
+
+            result.put("java.implementation.name", "Name:    " + System.getProperty("java.vm.name"));
+            result.put("java.implementation.vendor", "Vendor:  " + System.getProperty("java.vm.vendor"));
+            result.put("java.implementation.version", "Version: " + System.getProperty("java.vm.version"));
+
+            result.put("os.name", "Name:         " + Markdown.escapeUnderscore(System.getProperty("os.name")));
+            result.put("os.arch", "Architecture: " + Markdown.escapeUnderscore(System.getProperty("os.arch")));
+            result.put("os.version", "Version:      " + Markdown.escapeUnderscore(System.getProperty("os.version")));
             File lsb_release = new File("/usr/bin/lsb_release");
             if (lsb_release.canExecute()) {
                 try {
                     Process proc = new ProcessBuilder().command(lsb_release.getAbsolutePath(), "--description", "--short").start();
                     String distro = IOUtils.readFirstLine(proc.getInputStream(), "UTF-8");
                     if (proc.waitFor() == 0) {
-                        result.append(min).append(" Distribution: ").append(
-                                Markdown.escapeUnderscore(distro)).append("\n");
+                        result.put("os.distribution", "Distribution: " + Markdown.escapeUnderscore(distro));
                     } else {
                         logger.fine("lsb_release had a nonzero exit status");
                     }
                     proc = new ProcessBuilder().command(lsb_release.getAbsolutePath(), "--version", "--short").start();
                     String modules = IOUtils.readFirstLine(proc.getInputStream(), "UTF-8");
                     if (proc.waitFor() == 0 && modules != null) {
-                        result.append(min).append(" LSB Modules:  `").append(
-                                Markdown.escapeUnderscore(modules)).append("`\n");
+                        result.put("os.lsb.modules", "LSB Modules:  " + "`" + Markdown.escapeUnderscore(modules) + "`");
                     } else {
                         logger.fine("lsb_release had a nonzero exit status");
                     }
@@ -321,39 +327,32 @@ public class AboutJenkins extends Component {
                     logger.log(Level.WARNING, "lsb_release hung", x);
                 }
             }
+
             RuntimeMXBean mBean = ManagementFactory.getRuntimeMXBean();
             String process = mBean.getName();
             Matcher processMatcher = Pattern.compile("^(-?[0-9]+)@.*$").matcher(process);
             if (processMatcher.matches()) {
                 int processId = Integer.parseInt(processMatcher.group(1));
-                result.append(maj).append(" Process ID: ").append(processId).append(" (0x")
-                        .append(Integer.toHexString(processId)).append(")\n");
+                result.put("process.id", "Process ID: " + processId + " (0x" + Integer.toHexString(processId) + ")");
             }
             SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSZ");
             f.setTimeZone(TimeZone.getTimeZone("UTC"));
-            result.append(maj).append(" Process started: ")
-                    .append(f.format(new Date(mBean.getStartTime())))
-                    .append('\n');
-            result.append(maj).append(" Process uptime: ")
-                    .append(Util.getTimeSpanString(mBean.getUptime())).append('\n');
-            result.append(maj).append(" JVM startup parameters:\n");
-            if (mBean.isBootClassPathSupported()) {
-                result.append(min).append(" Boot classpath: `")
-                        .append(Markdown.escapeBacktick(mBean.getBootClassPath())).append("`\n");
+            result.put("process.started", "Process started: " + f.format(new Date(mBean.getStartTime())));
+            result.put("process.uptime", "Process uptime: " + Util.getTimeSpanString(mBean.getUptime()));
+
+            if (mBean.isBootClassPathSupported()) {;
+                result.put("classpaths.boot", "Boot classpath: " + "`" + Markdown.escapeBacktick(mBean.getBootClassPath()) + "`");
             }
-            result.append(min).append(" Classpath: `").append(Markdown.escapeBacktick(mBean.getClassPath()))
-                    .append("`\n");
-            result.append(min).append(" Library path: `").append(Markdown.escapeBacktick(mBean.getLibraryPath()))
-                    .append("`\n");
+            result.put("classpaths.main", "Classpath: " + "`" + Markdown.escapeBacktick(mBean.getClassPath()) + "`");
+            result.put("classpaths.library", "Library path: " + "`" + Markdown.escapeBacktick(mBean.getLibraryPath()) + "`");
+
             int count = 0;
             for (String arg : mBean.getInputArguments()) {
-                // The controller endpoint may be in the args
-                result.append(min).append(" arg[").append(count++).append("]: `").append(Markdown.escapeBacktick(ContentFilter.filter(filter, arg)))
-                        .append("`\n");
+                result.put("arguments." + count, "arg[" + (count++) + "]: " + "`" + Markdown.escapeBacktick(arg) + "`");
             }
-            return result.toString();
-        }
 
+            return result;
+        }
     }
 
     private static String humanReadableSize(long size) {
@@ -414,7 +413,7 @@ public class AboutJenkins extends Component {
             } catch (NullPointerException e) {
                 // pity Stapler.getCurrent() throws an NPE when outside of a request
             }
-            out.print(new GetJavaInfo("  *", "      -").getInfo(filter));
+            out.print(javaInfoToString(filter, new GetJavaInfo().getInfo(), "  * ", "      - "));
             out.println();
             out.println("Remoting details");
             out.println("---------------");
@@ -640,7 +639,7 @@ public class AboutJenkins extends Component {
             out.println("      - Labels:         " + ContentFilter.filter(filter, getLabelString(jenkins)));
             out.println("      - Usage:          `" + jenkins.getMode() + "`");
             out.println("      - Slave Version:  " + Launcher.VERSION);
-            out.print(new GetJavaInfo("      -", "          +").getInfo(filter));
+            out.print(javaInfoToString(filter, new GetJavaInfo().getInfo(), "      - ", "          + "));
             out.println();
             for (Node node : jenkins.getNodes()) {
                 out.println("  * `" + Markdown.escapeBacktick(ContentFilter.filter(filter, node.getNodeName())) + "` (" +getDescriptorName(node) +
@@ -679,18 +678,14 @@ public class AboutJenkins extends Component {
                                 "Could not get agent.jar version for " + node.getNodeName(), e);
                     }
                     try {
-                        final String javaInfo = AsyncResultCache.get(node, javaInfoCache,
-                                new GetJavaInfo("      -", "          +"), "Java info");
+                        final Map<String, String> javaInfo = AsyncResultCache.get(node, javaInfoCache,
+                                new GetJavaInfo(), "Java info");
                         if (javaInfo == null) {
                             logger.log(Level.FINE,
                                     "Could not get Java info for {0} and no cached value available",
                                     node.getNodeName());
                         } else {
-                            // We make sure the output is filtered, maybe some labels are going to be filtered, but
-                            // to avoid that:
-                            // TODO: we have to change the MasterToSlaveCallable (GetJavaInfo) call to return a Map of
-                            //  values (key: value) and filter all the values here.
-                            out.print(ContentFilter.filter(filter, javaInfo));
+                            out.print(javaInfoToString(filter, javaInfo, "      - ", "          + "));
                         }
                     } catch (IOException e) {
                         logger.log(Level.WARNING, "Could not get Java info for " + node.getNodeName(), e);
