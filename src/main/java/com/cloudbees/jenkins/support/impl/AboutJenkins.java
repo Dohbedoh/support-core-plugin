@@ -56,7 +56,21 @@ import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.TreeSet;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -191,7 +205,7 @@ public class AboutJenkins extends Component {
     private static class JavaInfo implements Serializable {
 
         private static final long serialVersionUID = -7901561952975491681L;
-
+        
         private final Map<String, String> main;
         private final Map<String, String> runtime;
         private final Map<String, String> specification;
@@ -222,26 +236,26 @@ public class AboutJenkins extends Component {
         private String infoToString(ContentFilter filter, String majorBullet, String minorBullet) {
             StringBuilder result = new StringBuilder();
 
-            result.append(majorBullet).append(" Java\n");
+            result.append(majorBullet).append("Java\n");
             main.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
 
-            result.append(majorBullet).append(" Java Runtime Specification\n");
+            result.append(majorBullet).append("Java Runtime Specification\n");
             runtime.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
 
-            result.append(majorBullet).append(" JVM Specification\n");
+            result.append(majorBullet).append("JVM Specification\n");
             specification.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
 
-            result.append(majorBullet).append(" JVM Implementation\n");
+            result.append(majorBullet).append("JVM Implementation\n");
             implementation.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
 
-            result.append(majorBullet).append(" Operating system\n");
+            result.append(majorBullet).append("Operating system\n");
             operationsSystem.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
 
             process.forEach((k, v) -> result.append(majorBullet).append(k).append(v).append("\n"));
 
-            result.append(majorBullet).append(" JVM startup parameters:\n");
+            result.append(majorBullet).append("JVM startup parameters:\n");
             classPaths.forEach((k, v) -> result.append(minorBullet).append(k).append(v).append("\n"));
-            startupArguments.forEach((k, v) -> result.append(minorBullet).append(k).append(filter.filter(v)).append("\n"));
+            startupArguments.forEach((k, v) -> result.append(minorBullet).append(k).append(ContentFilter.filter(filter, v)).append("\n"));
             return result.toString();
         }
     }
@@ -259,79 +273,79 @@ public class AboutJenkins extends Component {
 
             Map<String, String> mainMap = new LinkedHashMap<>();
             Runtime runtime = Runtime.getRuntime();
-            mainMap.put(" Home:           ", "`" + Markdown.escapeBacktick(System.getProperty("java.home")) + "`");
-            mainMap.put(" Vendor:           ", Markdown.escapeUnderscore(System.getProperty("java.vendor")));
-            mainMap.put(" Version:          ", Markdown.escapeUnderscore(System.getProperty("java.version")));
+            mainMap.put("Home:           ", "`" + Markdown.escapeBacktick(System.getProperty("java.home")) + "`");
+            mainMap.put("Vendor:           ", Markdown.escapeUnderscore(System.getProperty("java.vendor")));
+            mainMap.put("Version:          ", Markdown.escapeUnderscore(System.getProperty("java.version")));
             long maxMem = runtime.maxMemory();
             long allocMem = runtime.totalMemory();
             long freeMem = runtime.freeMemory();
-            mainMap.put(" Maximum memory:   ", humanReadableSize(maxMem));
-            mainMap.put(" Allocated memory: ", humanReadableSize(allocMem));
-            mainMap.put(" Free memory:      ", humanReadableSize(freeMem));
-            mainMap.put(" In-use memory:    ", humanReadableSize(allocMem - freeMem));
+            mainMap.put("Maximum memory:   ", humanReadableSize(maxMem));
+            mainMap.put("Allocated memory: ", humanReadableSize(allocMem));
+            mainMap.put("Free memory:      ", humanReadableSize(freeMem));
+            mainMap.put("In-use memory:    ", humanReadableSize(allocMem - freeMem));
 
             for (MemoryPoolMXBean bean : ManagementFactory.getMemoryPoolMXBeans()) {
                 if (bean.getName().toLowerCase().contains("perm gen")) {
                     MemoryUsage currentUsage = bean.getUsage();
-                    mainMap.put(" PermGen used:     ", humanReadableSize(currentUsage.getUsed()));
-                    mainMap.put(" PermGen max:      ", humanReadableSize(currentUsage.getMax()));
+                    mainMap.put("PermGen used:     ", humanReadableSize(currentUsage.getUsed()));
+                    mainMap.put("PermGen max:      ", humanReadableSize(currentUsage.getMax()));
                     break;
                 }
             }
 
             for (MemoryManagerMXBean bean : ManagementFactory.getMemoryManagerMXBeans()) {
                 if (bean.getName().contains("MarkSweepCompact")) {
-                    mainMap.put(" GC strategy:      ", "SerialGC");
+                    mainMap.put("GC strategy:      ", "SerialGC");
                     break;
                 }
                 if (bean.getName().contains("ConcurrentMarkSweep")) {
-                    mainMap.put(" GC strategy:      ", "ConcMarkSweepGC");
+                    mainMap.put("GC strategy:      ", "ConcMarkSweepGC");
                     break;
                 }
                 if (bean.getName().contains("PS")) {
-                    mainMap.put(" GC strategy:      ", "ParallelGC");
+                    mainMap.put("GC strategy:      ", "ParallelGC");
                     break;
                 }
                 if (bean.getName().contains("G1")) {
-                    mainMap.put(" GC strategy:      ", "G1");
+                    mainMap.put("GC strategy:      ", "G1");
                     break;
                 }
             }
-            mainMap.put(" Available CPUs:   ", "" + runtime.availableProcessors());
+            mainMap.put("Available CPUs:   ", "" + runtime.availableProcessors());
 
             Map<String, String> runtimeMap = new LinkedHashMap<>();
-            runtimeMap.put(" Name:    ", System.getProperty("java.specification.name"));
-            runtimeMap.put(" Vendor:  ", System.getProperty("java.specification.vendor"));
-            runtimeMap.put(" Version: ", System.getProperty("java.specification.version"));
+            runtimeMap.put("Name:    ", System.getProperty("java.specification.name"));
+            runtimeMap.put("Vendor:  ", System.getProperty("java.specification.vendor"));
+            runtimeMap.put("Version: ", System.getProperty("java.specification.version"));
 
             Map<String, String> specificationMap = new LinkedHashMap<>();
-            specificationMap.put(" Name:    ", System.getProperty("java.vm.specification.name"));
-            specificationMap.put(" Vendor:  ", System.getProperty("java.vm.specification.vendor"));
-            specificationMap.put(" Version: ", System.getProperty("java.vm.specification.version"));
+            specificationMap.put("Name:    ", System.getProperty("java.vm.specification.name"));
+            specificationMap.put("Vendor:  ", System.getProperty("java.vm.specification.vendor"));
+            specificationMap.put("Version: ", System.getProperty("java.vm.specification.version"));
 
             Map<String, String> implementationMap = new LinkedHashMap<>();
-            implementationMap.put(" Name:    ", Markdown.escapeUnderscore(System.getProperty("java.vm.name")));
-            implementationMap.put(" Vendor:  ", Markdown.escapeUnderscore(System.getProperty("java.vm.vendor")));
-            implementationMap.put(" Version: ", Markdown.escapeUnderscore(System.getProperty("java.vm.version")));
+            implementationMap.put("Name:    ", Markdown.escapeUnderscore(System.getProperty("java.vm.name")));
+            implementationMap.put("Vendor:  ", Markdown.escapeUnderscore(System.getProperty("java.vm.vendor")));
+            implementationMap.put("Version: ", Markdown.escapeUnderscore(System.getProperty("java.vm.version")));
 
             Map<String, String> osMap = new LinkedHashMap<>();
-            osMap.put(" Name:         ", Markdown.escapeUnderscore(System.getProperty("os.name")));
-            osMap.put(" Architecture: ", Markdown.escapeUnderscore(System.getProperty("os.arch")));
-            osMap.put(" Version:      ", Markdown.escapeUnderscore(System.getProperty("os.version")));
+            osMap.put("Name:         ", Markdown.escapeUnderscore(System.getProperty("os.name")));
+            osMap.put("Architecture: ", Markdown.escapeUnderscore(System.getProperty("os.arch")));
+            osMap.put("Version:      ", Markdown.escapeUnderscore(System.getProperty("os.version")));
             File lsb_release = new File("/usr/bin/lsb_release");
             if (lsb_release.canExecute()) {
                 try {
                     Process proc = new ProcessBuilder().command(lsb_release.getAbsolutePath(), "--description", "--short").start();
                     String distro = IOUtils.readFirstLine(proc.getInputStream(), "UTF-8");
                     if (proc.waitFor() == 0) {
-                        osMap.put(" Distribution: ", Markdown.escapeUnderscore(distro));
+                        osMap.put("Distribution: ", Markdown.escapeUnderscore(distro));
                     } else {
                         logger.fine("lsb_release had a nonzero exit status");
                     }
                     proc = new ProcessBuilder().command(lsb_release.getAbsolutePath(), "--version", "--short").start();
                     String modules = IOUtils.readFirstLine(proc.getInputStream(), "UTF-8");
                     if (proc.waitFor() == 0 && modules != null) {
-                        osMap.put(" LSB Modules:  ", "`" + Markdown.escapeUnderscore(modules) + "`");
+                        osMap.put("LSB Modules:  ", "`" + Markdown.escapeUnderscore(modules) + "`");
                     } else {
                         logger.fine("lsb_release had a nonzero exit status");
                     }
@@ -348,24 +362,24 @@ public class AboutJenkins extends Component {
             Matcher processMatcher = Pattern.compile("^(-?[0-9]+)@.*$").matcher(process);
             if (processMatcher.matches()) {
                 int processId = Integer.parseInt(processMatcher.group(1));
-                processMap.put(" Process ID: ", processId + " (0x" + Integer.toHexString(processId) + ")");
+                processMap.put("Process ID: ", processId + " (0x" + Integer.toHexString(processId) + ")");
             }
             SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSZ");
             f.setTimeZone(TimeZone.getTimeZone("UTC"));
-            processMap.put(" Process started: ", f.format(new Date(mBean.getStartTime())));
-            processMap.put(" Process uptime: ", Util.getTimeSpanString(mBean.getUptime()));
+            processMap.put("Process started: ", f.format(new Date(mBean.getStartTime())));
+            processMap.put("Process uptime: ", Util.getTimeSpanString(mBean.getUptime()));
 
             Map<String, String> classPathsMap = new LinkedHashMap<>();
             if (mBean.isBootClassPathSupported()) {
-                classPathsMap.put(" Boot classpath: ", "`" + Markdown.escapeBacktick(mBean.getBootClassPath()) + "`");
+                classPathsMap.put("Boot classpath: ", "`" + Markdown.escapeBacktick(mBean.getBootClassPath()) + "`");
             }
-            classPathsMap.put(" Classpath: ", "`" + Markdown.escapeBacktick(mBean.getClassPath()) + "`");
-            classPathsMap.put(" Library path: ", "`" + Markdown.escapeBacktick(mBean.getLibraryPath()) + "`");
+            classPathsMap.put("Classpath: ", "`" + Markdown.escapeBacktick(mBean.getClassPath()) + "`");
+            classPathsMap.put("Library path: ", "`" + Markdown.escapeBacktick(mBean.getLibraryPath()) + "`");
 
             Map<String, String> startupArgsMap = new LinkedHashMap<>();
             int count = 0;
             for (String arg : mBean.getInputArguments()) {
-                startupArgsMap.put(" arg[" + (count++) + "]: ", "`" + Markdown.escapeBacktick(arg) + "`");
+                startupArgsMap.put("arg[" + (count++) + "]: ", "`" + Markdown.escapeBacktick(arg) + "`");
             }
 
             return new JavaInfo(
@@ -439,7 +453,7 @@ public class AboutJenkins extends Component {
             } catch (NullPointerException e) {
                 // pity Stapler.getCurrent() throws an NPE when outside of a request
             }
-            out.print(new GetJavaInfo().getInfo().infoToString(filter,"  *", "      -"));
+            out.print(new GetJavaInfo().getInfo().infoToString(filter, "  * ", "      - "));
             out.println();
             out.println("Remoting details");
             out.println("---------------");
@@ -665,7 +679,7 @@ public class AboutJenkins extends Component {
             out.println("      - Labels:         " + ContentFilter.filter(filter, getLabelString(jenkins)));
             out.println("      - Usage:          `" + jenkins.getMode() + "`");
             out.println("      - Slave Version:  " + Launcher.VERSION);
-            out.print(new GetJavaInfo().getInfo().infoToString(filter, "      -", "          +"));
+            out.print(new GetJavaInfo().getInfo().infoToString(filter, "      - ", "          + "));
             out.println();
             for (Node node : jenkins.getNodes()) {
                 out.println("  * `" + Markdown.escapeBacktick(ContentFilter.filter(filter, node.getNodeName())) + "` (" +getDescriptorName(node) +
@@ -711,11 +725,7 @@ public class AboutJenkins extends Component {
                                     "Could not get Java info for {0} and no cached value available",
                                     node.getNodeName());
                         } else {
-                            // We make sure the output is filtered, maybe some labels are going to be filtered, but
-                            // to avoid that:
-                            // TODO: we have to change the MasterToSlaveCallable (GetJavaInfo) call to return a Map of
-                            //  values (key: value) and filter all the values here.
-                            out.print(javaInfo.infoToString(filter, "      -", "          +"));
+                            out.print(javaInfo.infoToString(filter, "      - ", "          + "));
                         }
                     } catch (IOException e) {
                         logger.log(Level.WARNING, "Could not get Java info for " + node.getNodeName(), e);
