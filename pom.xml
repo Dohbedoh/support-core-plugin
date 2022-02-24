@@ -29,7 +29,7 @@
   <parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>plugin</artifactId>
-    <version>4.31</version>
+    <version>4.37</version>
     <relativePath />
   </parent>
 
@@ -69,7 +69,7 @@
   </scm>
 
   <properties>
-    <revision>2.79</revision>
+    <revision>2.81</revision>
     <changelist>-SNAPSHOT</changelist>
     <jenkins.version>2.222.4</jenkins.version>
     <java.level>8</java.level>
@@ -110,7 +110,7 @@
     <dependency>
       <groupId>io.jenkins.lib</groupId>
       <artifactId>support-log-formatter</artifactId>
-      <version>1.0</version>
+      <version>1.1</version>
     </dependency>
     <!-- plugin dependencies -->
     <dependency>
@@ -143,7 +143,7 @@
     <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
-      <version>3.21.0</version>
+      <version>3.22.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -216,6 +216,12 @@
             <systemPropertyVariables>
               <hudson.remoting.ExportTable.exportTraces>true</hudson.remoting.ExportTable.exportTraces>
             </systemPropertyVariables>
+            <!--            Security2186Test-->
+            <environmentVariables>
+              <test2186.trustStorePassword>agsdfaksdgFASKD</test2186.trustStorePassword>
+            </environmentVariables>
+            <argLine>-Dtest2186.trustStorePassword=ASJDHFGASLDFG</argLine>
+
           </configuration>
         </plugin>
       </plugins>
