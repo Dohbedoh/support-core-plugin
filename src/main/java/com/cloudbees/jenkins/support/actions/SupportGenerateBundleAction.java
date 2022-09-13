@@ -159,7 +159,7 @@ public class SupportGenerateBundleAction extends SupportChildAction {
     }
 
     /**
-     * Generates a support bundle with only requested components.
+     * Generates a support bundle /support/{@value URL}/generateBundle with only requested components.
      *
      * @param components component names separated by comma.
      * @param rsp        The stapler response
