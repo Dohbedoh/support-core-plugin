@@ -45,10 +45,23 @@ public final class BundleFileName {
      */
     @NonNull
     public static String generate(String qualifier) {
-        return generate(DEFAULT_CLOCK, qualifier);
+        return generate(DEFAULT_CLOCK, qualifier, "zip");
     }
 
-    static String generate(Clock clock, String qualifier) {
+    /**
+     * @return the bundle name with qualifier and extension.
+     */
+    @NonNull
+    public static String generate(String qualifier, String extension) {
+        return generate(DEFAULT_CLOCK, qualifier, extension);
+    }
+
+    @NonNull
+    public static String generate(Clock clock, String qualifier) {
+        return generate(clock, qualifier, "zip");
+    }
+
+    static String generate(Clock clock, String qualifier, String extension) {
         Objects.requireNonNull(clock);
 
         StringBuilder filename = new StringBuilder();
@@ -61,7 +74,10 @@ public final class BundleFileName {
             filename.append("_").append(instanceType);
         }
         filename.append("_").append(LocalDateTime.now(clock).format(DATE_TIME_FORMATTER));
-        filename.append(".zip");
+        if (StringUtils.isNotBlank(extension)) {
+            filename.append(".");
+            filename.append(extension);
+        }
         return filename.toString();
     }
 

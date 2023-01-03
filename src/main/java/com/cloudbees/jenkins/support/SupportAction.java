@@ -27,6 +27,7 @@ package com.cloudbees.jenkins.support;
 import com.cloudbees.jenkins.support.actions.SupportChildAction;
 import com.cloudbees.jenkins.support.actions.SupportBundleAction;
 import com.cloudbees.jenkins.support.actions.SupportContentAction;
+import com.cloudbees.jenkins.support.actions.SupportJFRAction;
 import com.cloudbees.jenkins.support.api.Component;
 import hudson.Extension;
 import hudson.ExtensionList;
@@ -74,10 +75,12 @@ public class SupportAction extends Actionable implements RootAction, StaplerProx
     /** Support Actions */
     private final SupportBundleAction bundleAction;
     private final SupportContentAction contentAction;
+    private final SupportJFRAction jfrAction;
 
     public SupportAction() {
         bundleAction = new SupportBundleAction(this);
         contentAction = new SupportContentAction(this);
+        jfrAction = new SupportJFRAction(this);
     }
 
     @Override
