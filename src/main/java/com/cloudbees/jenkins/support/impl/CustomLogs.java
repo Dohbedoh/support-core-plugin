@@ -3,20 +3,24 @@ package com.cloudbees.jenkins.support.impl;
 import com.cloudbees.jenkins.support.api.Component;
 import com.cloudbees.jenkins.support.api.Container;
 import com.cloudbees.jenkins.support.api.FileContent;
-import com.cloudbees.jenkins.support.api.SupportContext;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
 import hudson.init.Terminator;
 import hudson.logging.LogRecorder;
 import hudson.model.PeriodicWork;
 import hudson.security.Permission;
+import hudson.triggers.SafeTimerTask;
 import hudson.util.CopyOnWriteList;
 import hudson.util.io.RewindableFileOutputStream;
 import hudson.util.io.RewindableRotatingFileOutputStream;
 import io.jenkins.lib.support_log_formatter.SupportLogFormatter;
 import java.util.List;
 import jenkins.model.Jenkins;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,7 +45,7 @@ public class CustomLogs extends Component {
 
     private static final Logger LOGGER = Logger.getLogger(CustomLogs.class.getName());
     private static final int MAX_ROTATE_LOGS = Integer.getInteger(CustomLogs.class.getName() + ".MAX_ROTATE_LOGS", 9);
-    private static final File customLogs = new File(TaskLogs.getLogsRoot(), "custom");
+    private static final File customLogs = new File(SafeTimerTask.getLogsRoot(), "custom");
     private final List<LogRecorder> logRecorders = Jenkins.get().getLog().getRecorders();
 
     @NonNull
@@ -54,11 +58,6 @@ public class CustomLogs extends Component {
     @Override
     public String getDisplayName() {
         return "Controller Custom Log Recorders";
-    }
-
-    @Override
-    public void start(@NonNull SupportContext context) {
-        Logger.getLogger("").addHandler(new CustomHandler());
     }
 
     @Override
@@ -123,6 +122,12 @@ public class CustomLogs extends Component {
             handler.publish(record);
             LogFlusher.scheduleFlush(handler);
         }
+    }
+
+    @Initializer(after = InitMilestone.EXTENSIONS_AUGMENTED, before = InitMilestone.SYSTEM_CONFIG_LOADED)
+    @Restricted(NoExternalUse.class)
+    public void startCustomHandler() {
+        Logger.getLogger("").addHandler(new CustomHandler());
     }
 
     private final class CustomHandler extends Handler {

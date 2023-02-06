@@ -55,7 +55,6 @@ import hudson.Main;
 import hudson.Plugin;
 import hudson.init.InitMilestone;
 import hudson.init.Initializer;
-import hudson.model.AbstractCIBase;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Node;
@@ -70,6 +69,9 @@ import hudson.security.Permission;
 import hudson.security.PermissionGroup;
 import hudson.security.PermissionScope;
 import hudson.slaves.ComputerListener;
+import hudson.triggers.SafeTimerTask;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import jenkins.metrics.impl.JenkinsMetricProviderImpl;
 import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
@@ -101,6 +103,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -148,6 +151,10 @@ public class SupportPlugin extends Plugin {
     public static final PermissionGroup SUPPORT_PERMISSIONS =
             new PermissionGroup(SupportPlugin.class, Messages._SupportPlugin_PermissionGroup());
 
+    /**
+     * @deprecated not used anymore as the usage has now been limited to {@link Jenkins#ADMINISTER}
+     */
+    @Deprecated
     public static final Permission CREATE_BUNDLE =
             new Permission(SUPPORT_PERMISSIONS, "DownloadBundle", Messages._SupportPlugin_CreateBundle(),
                     Jenkins.ADMINISTER, PermissionScope.JENKINS);
@@ -171,7 +178,26 @@ public class SupportPlugin extends Plugin {
     public SupportPlugin() {
         super();
         handler.setLevel(getLogLevel());
-        handler.setDirectory(getRootDirectory(), "all");
+        handler.setDirectory(getLogsDirectory(), "all");
+    }
+
+    @Initializer(after = InitMilestone.EXTENSIONS_AUGMENTED)
+    public static void migrateExistingLogs() {
+        File rootDirectory = getRootDirectory();
+        File[] files = rootDirectory.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isFile() && f.getName().endsWith(".log")) {
+                    Path p = f.toPath();
+                    try {
+                        Files.move(p, getLogsDirectory().toPath().resolve(p.getFileName()));
+                        LOGGER.log(Level.INFO, "Moved " + p + " to " + getLogsDirectory());
+                    } catch (IOException e) {
+                        LOGGER.log(Level.WARNING, e, () -> "Unable to move " + p + " to " + getLogsDirectory());
+                    }
+                }
+            }
+        }
     }
 
     public SupportProvider getSupportProvider() {
@@ -193,12 +219,20 @@ public class SupportPlugin extends Plugin {
     /**
      * Working directory that the support-core plugin uses to write out files.
      *
-     * @return the wrking directory that the support-core plugin uses to write out files.
+     * @return the working directory that the support-core plugin uses to write out files.
      */
     public static File getRootDirectory() {
         return new File(Jenkins.get().getRootDir(), SUPPORT_DIRECTORY_NAME);
     }
 
+    /**
+     * Working directory that the support-core plugin uses to write out log files.
+     *
+     * @return the working directory that the support-core plugin uses to write out log files.
+     */
+    public static File getLogsDirectory() {
+        return new File(SafeTimerTask.getLogsRoot(), SUPPORT_DIRECTORY_NAME);
+    }
 
     public static Authentication getRequesterAuthentication() {
         return requesterAuthentication.get();
@@ -538,13 +572,13 @@ public class SupportPlugin extends Plugin {
                 errors.println();
             }
         }
-        return contentsContainer.contents;
+        return contentsContainer.getContents();
         
     }
 
     private static class ContentContainer extends Container {
         private final List<Content> contents = new ArrayList<>();
-        private final Set<String> names = new TreeSet<>();
+        private final Set<String> names = new HashSet<>();
 
         //The filter to return the names filtered
         private final Optional<ContentFilter> maybeFilter;
@@ -553,22 +587,29 @@ public class SupportPlugin extends Plugin {
          * We need the filter to be able to filter the contents written to the manifest
          * @param maybeFilter filter to use when writing the name of the contents
          */
-        public ContentContainer(Optional<ContentFilter> maybeFilter) {
+        ContentContainer(Optional<ContentFilter> maybeFilter) {
             this.maybeFilter = maybeFilter;
         }
 
         @Override
         public void add(Content content) {
             if (content != null) {
-                contents.add(content);
-                names.add(getNameFiltered(maybeFilter, content.getName(), content.getFilterableParameters()));
+                String name = getNameFiltered(maybeFilter, content.getName(), content.getFilterableParameters());
+                synchronized (this) {
+                    contents.add(content);
+                    names.add(name);
+                }
             }
         }
 
-        private Set<String> getLatestNames() {
+        synchronized Set<String> getLatestNames() {
             Set<String> copy = new TreeSet<>(names);
             names.clear();
             return copy;
+        }
+
+        synchronized List<Content> getContents() {
+            return new ArrayList<>(contents);
         }
 
     }
@@ -644,29 +685,14 @@ public class SupportPlugin extends Plugin {
         context = new SupportContextImpl();
     }
 
+    /**
+     * @return the {@link com.cloudbees.jenkins.support.api.SupportContext}
+     * @deprecated usage removed
+     */
     @NonNull
+    @Deprecated
     public synchronized SupportContextImpl getContext() {
         return context;
-    }
-
-    @Override
-    public void postInitialize() throws Exception {
-        super.postInitialize();
-        for (Component component : getComponents()) {
-            try {
-                long initializerStart = System.currentTimeMillis();
-                component.start(getContext());
-                if (AbstractCIBase.LOG_STARTUP_PERFORMANCE) {
-                    long delta = System.currentTimeMillis() - initializerStart;
-                    logger.info(String.format("Took %dms for support component %s startup", delta, component.getId()));
-                }
-            } catch (Throwable t) {
-                LogRecord logRecord = new LogRecord(Level.WARNING, "Exception propagated from component: {0}");
-                logRecord.setThrown(t);
-                logRecord.setParameters(new Object[]{component.getDisplayName()});
-                logger.log(logRecord);
-            }
-        }
     }
 
     @Override
@@ -823,7 +849,7 @@ public class SupportPlugin extends Plugin {
         @Override
         public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
             final Node node = c.getNode();
-            if (node instanceof Jenkins) {
+            if (node == null || node instanceof Jenkins) {
                 return;
             }
             try {

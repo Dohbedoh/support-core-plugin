@@ -20,7 +20,6 @@ import hudson.security.Permission;
 import hudson.slaves.SlaveComputer;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -154,7 +153,6 @@ public class FileDescriptorLimit extends Component {
     /**
      * * Using OperatingSystemMXBean, we can obtain the total number of open file descriptors.
      */
-    @IgnoreJRERequirement // UnixOperatingSystemMXBean
     private static void getOpenFileDescriptorCount(PrintWriter writer) {
         try {
             OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
@@ -174,6 +172,7 @@ public class FileDescriptorLimit extends Component {
      * * going to /proc/self/fd. This will translate self to the correct PID of the current java
      * * process. Each file in the folder is a symlink to the location of the file descriptor.
      */
+    @SuppressFBWarnings(value = "DCN_NULLPOINTER_EXCEPTION", justification = "Intentional")
     private static void listAllOpenFileDescriptors(PrintWriter writer, ContentFilter filter) throws IOException {
         writer.println();
         writer.println("All open files");
