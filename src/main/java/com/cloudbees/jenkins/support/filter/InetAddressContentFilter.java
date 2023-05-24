@@ -32,9 +32,12 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Filters contents by mapping all found IPv4 and IPv6 addresses to generated names.
@@ -61,26 +64,55 @@ public class InetAddressContentFilter implements ContentFilter {
     private static final String IPv6_COMPRESSED_AND_MIX = "(?i)((?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?)::(((?:[0-9a-f]{1,4}:){1,5})?(" + IPv4 + ")|((?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?))";
     private static final Pattern IP_ADDRESS = Pattern.compile("(?<![:.\\w])(" + IPv4 + '|' + IPv6_STANDARD_AND_MIX + '|' + IPv6_COMPRESSED_AND_MIX + ")(?![:.\\w])");
 
+    private static int FILTER_TYPE = 1;
+
+    public static void setFilterType(int filterType) {
+        FILTER_TYPE = filterType;
+    }
+
     @Override
     public @NonNull String filter(@NonNull String input) {
         ContentMappings mappings = ContentMappings.get();
-        Matcher m = IP_ADDRESS.matcher(input);
-        // Use the map keys to filter every IP found without repeating the filtering if the same is found twice.
-        Map<String, String> searchAndReplacementValues = new HashMap<>();
-        while (m.find()) {
-            String ip = m.group();
+        if(FILTER_TYPE == 0) {
+            Matcher m = IP_ADDRESS.matcher(input);
+            // Use the map keys to filter every IP found without repeating the filtering if the same is found twice.
+            Map<String, String> searchAndReplacementValues = new HashMap<>();
+            while (m.find()) {
+                String ip = m.group();
 
-            if (!mappings.getStopWords().contains(ip)) {
-                ContentMapping map = mappings.getMappingOrCreate(ip, InetAddressContentFilter::newMapping);
-                searchAndReplacementValues.put(ip, map.getReplacement());
+                if (!mappings.getStopWords().contains(ip)) {
+                    ContentMapping map = mappings.getMappingOrCreate(ip, InetAddressContentFilter::newMapping);
+                    searchAndReplacementValues.put(ip, map.getReplacement());
+                }
             }
-        }
-        String filtered = input;
-        if (!searchAndReplacementValues.isEmpty()) {
-            filtered = WordReplacer.replaceWordsIgnoreCase(input, searchAndReplacementValues.keySet().toArray(new String[0]), searchAndReplacementValues.values().toArray(new String[0]));
-        }
+            String filtered = input;
+            if (!searchAndReplacementValues.isEmpty()) {
+                filtered = WordReplacer.replaceWordsIgnoreCase(input, searchAndReplacementValues.keySet().toArray(new String[0]), searchAndReplacementValues.values().toArray(new String[0]));
+            }
 
-        return filtered;
+            return filtered;
+        } else {
+            StringBuilder replacement = new StringBuilder();
+            int lastIndex = 0;
+
+            Matcher matcher = IP_ADDRESS.matcher(input);
+            while (matcher.find()) {
+                String ip = matcher.group();
+                replacement.append(input, lastIndex, matcher.start());
+                if (!mappings.getStopWords().contains(ip)) {
+                    replacement.append(mappings.getMappingOrCreate(ip, InetAddressContentFilter::newMapping).getReplacement());
+                } else {
+                    replacement.append(ip);
+                }
+                lastIndex = matcher.end();
+            }
+
+            if (lastIndex < input.length()) {
+                replacement.append(input, lastIndex, input.length());
+            }
+
+            return replacement.toString();
+        }
     }
 
     private static ContentMapping newMapping(String original) {

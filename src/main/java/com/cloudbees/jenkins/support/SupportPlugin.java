@@ -37,6 +37,7 @@ import com.cloudbees.jenkins.support.filter.ContentFilters;
 import com.cloudbees.jenkins.support.filter.ContentMappings;
 import com.cloudbees.jenkins.support.filter.FilteredOutputStream;
 import com.cloudbees.jenkins.support.filter.PrefilteredContent;
+import com.cloudbees.jenkins.support.filter.SensitiveContentFilter;
 import com.cloudbees.jenkins.support.impl.ThreadDumps;
 import com.cloudbees.jenkins.support.util.CallAsyncWrapper;
 import com.cloudbees.jenkins.support.util.IgnoreCloseOutputStream;
@@ -380,6 +381,7 @@ public class SupportPlugin extends Plugin {
 
                 // Recalculate the mappings and stop words and save it to disk
                 if(maybeFilter.isPresent()) {
+//                    SensitiveContentFilter.nextFilterType();
                     reloadAndSaveMappings(maybeFilter.get());
                 }
 

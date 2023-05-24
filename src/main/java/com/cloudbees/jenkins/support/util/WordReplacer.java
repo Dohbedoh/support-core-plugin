@@ -1,8 +1,27 @@
 package com.cloudbees.jenkins.support.util;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class WordReplacer {
+
+    /**
+     * Replace all words in the input by the replaces. The replacements happens only if the texts to replace are not
+     * part of a greater word, that is, if the text is a whole word, separated by non {@link Character#isLetterOrDigit(char)}
+     * characters.
+     * @param input the text where the replacements take place
+     * @param words the words to look for and replace
+     * @param replaces the new words to use
+     */
+    public static String replaceWords(String input, List<Pattern> words, List<String> replaces) {
+        StringBuilder sb = new StringBuilder(input);
+        replaceWords(sb, words, replaces);
+        return sb.toString();
+    }
+
     /**
      * Replace all words in the input by the replaces. The replacements happens only if the texts to replace are not
      * part of a greater word, that is, if the text is a whole word, separated by non {@link Character#isLetterOrDigit(char)}
@@ -49,6 +68,22 @@ public class WordReplacer {
      */
     public static void replaceWordsIgnoreCase(StringBuilder input, String[] words, String[] replaces) {
         replaceWords(input, words, replaces, true);
+    }
+
+    public static void replaceWords(StringBuilder input, List<Pattern> words, List<String> replaces) {
+        if (input == null || input.length()==0 || words == null ||
+            words.size() == 0 || replaces == null || replaces.size() == 0) {
+            return;
+        }
+
+        // the same number of word to replace and replaces to use
+        if (words.size() != replaces.size()) {
+            throw new IllegalArgumentException(String.format("Words (%d) and replaces (%d) lengths should be equals", words.size(), replaces.size()));
+        }
+
+        for(int i = 0; i < words.size(); i++) {
+            replaceWord(input, words.get(i), replaces.get(i));
+        }
     }
 
     // To avoid repeat this code above
@@ -178,5 +213,31 @@ public class WordReplacer {
             // move to the next character after the replace word
             pos = pos + replace.length();
         } while (pos > -1 && pos < workInput.length());
+    }
+
+    private static void replaceWord(StringBuilder input, Pattern word, String replace) {
+        StringBuilder workInput = new StringBuilder(input);
+        input = new StringBuilder();
+
+        if (word == null || input.length() == 0 || word.pattern().length() == 0) {
+            return;
+        }
+
+        if (replace == null) {
+            replace = "SENSITIVE_EMPTY";
+        }
+
+        int lastIndex = 0;
+
+        for (MatchResult matchResult : word.matcher(workInput).results().collect(Collectors.toList())) {
+            input
+                .append(workInput, lastIndex, matchResult.start())
+                .append(replace);
+            lastIndex = matchResult.end();
+        }
+
+        if (lastIndex < workInput.length()) {
+            input.append(workInput, lastIndex, workInput.length());
+        }
     }
 }

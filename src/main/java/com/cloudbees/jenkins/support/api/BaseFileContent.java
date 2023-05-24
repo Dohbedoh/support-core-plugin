@@ -126,10 +126,8 @@ class BaseFileContent {
         try {
             if (maxSize == -1) {
                 for (String s : Files.readAllLines(file.toPath())) {
-                    String filtered = ContentFilter.filter(filter, secretsFilterFunction.apply(s));
+                    String filtered = ContentFilter.filter(filter, secretsFilterFunction.apply(s)) + "\n";
                     IOUtils.write(filtered, os, ENCODING);
-                    // The new line
-                    IOUtils.write("\n", os, ENCODING);
                 }
             } else {
                 try (TruncatedFileReader reader = new TruncatedFileReader(file, maxSize)) {

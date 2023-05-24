@@ -26,6 +26,7 @@ package com.cloudbees.jenkins.support.filter;
 
 import com.cloudbees.jenkins.support.SupportPlugin;
 import com.cloudbees.jenkins.support.util.Persistence;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.ExtensionList;
 import hudson.model.AbstractItem;
@@ -36,7 +37,6 @@ import org.apache.commons.lang.StringUtils;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -52,11 +52,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static java.util.stream.Collectors.toConcurrentMap;
 import static java.util.stream.Collectors.toMap;
@@ -141,6 +144,7 @@ public class ContentMappings extends ManagementLink implements Saveable, Iterabl
                 "user", "anonymous", "authenticated",
                 "everyone", "system", "admin", Jenkins.VERSION
         ));
+        // agent job build run default dev development prod production staging  pipeline
     }
 
     /**
@@ -210,6 +214,13 @@ public class ContentMappings extends ManagementLink implements Saveable, Iterabl
      */
     public @NonNull Map<String, String> getMappings() {
         return mappings.values().stream().collect(toMap(ContentMapping::getOriginal, ContentMapping::getReplacement));
+    }
+
+    public @NonNull String getMappingsPattern() {
+        return StreamSupport.stream(
+                    Spliterators.spliteratorUnknownSize(ContentMappings.get().iterator(), Spliterator.NONNULL), false)
+                .map(ContentMapping::getOriginal)
+                .collect(Collectors.joining("|"));
     }
 
     /**
