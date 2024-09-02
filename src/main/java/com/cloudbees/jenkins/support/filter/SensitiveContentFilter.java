@@ -102,7 +102,9 @@ public class SensitiveContentFilter implements ContentFilter {
                     // container)
                     if (!stopWords.contains(lowerCaseOriginal)) {
                         ContentMapping mapping = mappings.getMappingOrCreate(
-                                name, original -> ContentMapping.of(original, provider.generateFake()));
+                                name,
+                                startTime,
+                                original -> ContentMapping.of(original, provider.generateFake(), startTime));
                         // Matcher#appendReplacement needs to have the `\` and `$` escaped.
                         replacementsMap.putIfAbsent(
                                 lowerCaseOriginal,

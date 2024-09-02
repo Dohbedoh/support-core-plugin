@@ -27,6 +27,7 @@ package com.cloudbees.jenkins.support.filter;
 import com.cloudbees.jenkins.support.util.WordReplacer;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Functions;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -48,12 +49,13 @@ public class ContentMapping implements ContentFilter {
 
     private final String original;
     private final String replacement;
+    private final long lastTouch;
     private final int hashCode;
 
     private final String[] originals;
     private final String[] replacements;
 
-    private ContentMapping(@NonNull String original, @NonNull String replacement) {
+    private ContentMapping(@NonNull String original, @NonNull String replacement, long lastUpdate) {
         this.original = original;
         this.replacement = replacement;
 
@@ -68,18 +70,24 @@ public class ContentMapping implements ContentFilter {
 
         // create the replacement array with the same length as the resulting originals
         replacements = new String[originals.length];
-        for (int i = 0; i < replacements.length; i++) {
-            replacements[i] = replacement;
-        }
+        Arrays.fill(replacements, replacement);
 
         this.hashCode = original.hashCode();
+        this.lastTouch = lastUpdate == 0 ? System.currentTimeMillis() : lastUpdate;
     }
 
     /**
      * Constructs a ContentMapping using an original and replacement value.
      */
     public static ContentMapping of(@NonNull String original, @NonNull String replacement) {
-        return new ContentMapping(original, replacement);
+        return of(original, replacement, System.currentTimeMillis());
+    }
+
+    /**
+     * Constructs a ContentMapping using an original and replacement value.
+     */
+    public static ContentMapping of(@NonNull String original, @NonNull String replacement, long lastUpdate) {
+        return new ContentMapping(original, replacement, lastUpdate);
     }
 
     /**
@@ -94,6 +102,10 @@ public class ContentMapping implements ContentFilter {
      */
     public @NonNull String getReplacement() {
         return replacement;
+    }
+
+    public long getLastTouch() {
+        return lastTouch;
     }
 
     @Override
@@ -118,15 +130,17 @@ public class ContentMapping implements ContentFilter {
         SerializationProxy proxy = new SerializationProxy();
         proxy.original = original;
         proxy.replacement = replacement;
+        proxy.lastTouch = lastTouch;
         return proxy;
     }
 
     private static class SerializationProxy {
         private String original;
         private String replacement;
+        private long lastTouch;
 
         private Object readResolve() {
-            return ContentMapping.of(original, replacement);
+            return ContentMapping.of(original, replacement, lastTouch);
         }
     }
 }

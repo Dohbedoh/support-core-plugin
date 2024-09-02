@@ -40,11 +40,13 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -61,6 +63,10 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
  */
 @Restricted(NoExternalUse.class)
 public class ContentMappings extends ManagementLink implements Saveable, Iterable<ContentMapping> {
+
+    private static final String RETENTION_PROPERTY = ContentMappings.class.getName() + ".retention";
+
+    private static final Integer RETENTION_DAYS = Integer.getInteger(RETENTION_PROPERTY, 5);
 
     /**
      * @return the singleton instance
@@ -124,20 +130,30 @@ public class ContentMappings extends ManagementLink implements Saveable, Iterabl
     }
 
     /**
+     * Looks up and update last touch, or creates a new ContentMapping for the given original string, touch time, and a
+     * ContentMapping generator.
+     */
+    public @NonNull ContentMapping getMappingOrCreate(
+            @NonNull String original, long touchTime, @NonNull Function<String, ContentMapping> generator) {
+        ContentMapping mapping = mappings.get(original);
+        if (mapping == null || (touchTime - mapping.getLastTouch()) < TimeUnit.DAYS.toMillis(RETENTION_DAYS)) {
+            try {
+                mapping = generator.apply(original);
+                mappings.put(original, mapping);
+                save();
+            } catch (IOException e) {
+                LOGGER.log(Level.WARNING, "Could not save mappings file", e);
+            }
+        }
+        return mapping;
+    }
+
+    /**
      * Looks up or creates a new ContentMapping for the given original string and a ContentMapping generator.
      */
     public @NonNull ContentMapping getMappingOrCreate(
             @NonNull String original, @NonNull Function<String, ContentMapping> generator) {
-        boolean isNew = !mappings.containsKey(original);
-        ContentMapping mapping = mappings.computeIfAbsent(original, generator);
-        try {
-            if (isNew) {
-                save();
-            }
-        } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Could not save mappings file", e);
-        }
-        return mapping;
+        return getMappingOrCreate(original, System.currentTimeMillis(), generator);
     }
 
     public void reload() {
@@ -145,12 +161,30 @@ public class ContentMappings extends ManagementLink implements Saveable, Iterabl
             stopWords.add(item.getTaskNoun().toLowerCase(Locale.ENGLISH));
             stopWords.add(item.getPronoun().toLowerCase(Locale.ENGLISH));
         });
+        sweep();
     }
 
     protected void clear() {
         stopWords.clear();
         stopWords.addAll(ExtensionList.lookupSingleton(DefaultStopWords.class).getWords());
         mappings.clear();
+    }
+
+    /**
+     * Remove all mappings that have not been "touched" for more certain amount of time (per the retention).
+     */
+    private void sweep() {
+        long sweepStart = System.currentTimeMillis();
+        List<ContentMapping> toSweep = mappings.values().stream()
+                .filter(contentMapping ->
+                        contentMapping.getLastTouch() < (sweepStart - TimeUnit.DAYS.toMillis(RETENTION_DAYS)))
+                .collect(Collectors.toList());
+        toSweep.forEach(contentMapping -> mappings.remove(contentMapping.getOriginal()));
+        try {
+            save();
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Could not save mappings file", e);
+        }
     }
 
     @Override
