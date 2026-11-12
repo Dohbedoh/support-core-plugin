@@ -44,12 +44,15 @@ import hudson.model.Run;
 import hudson.security.Permission;
 import hudson.slaves.SlaveComputer;
 import hudson.util.io.RewindableRotatingFileOutputStream;
+import java.io.Closeable;
 import java.io.File;
+import java.io.Flushable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.Set;
@@ -67,10 +70,11 @@ import org.kohsuke.stapler.DataBoundConstructor;
 @Extension
 public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
+    private static final Logger LOGGER = Logger.getLogger(SlaveLaunchLogs.class.getName());
     private static final int MAX_ROTATE_LOGS =
             Integer.getInteger(SlaveLaunchLogs.class.getName() + ".MAX_ROTATE_LOGS", 9);
-
-    private static final Logger LOGGER = Logger.getLogger(SlaveLaunchLogs.class.getName());
+    private static final long MAX_FILE_SIZE =
+            Long.getLong(SlaveLaunchLogs.class.getName() + ".MAX_FILE_SIZE", FileListCapComponent.MAX_FILE_SIZE);
 
     @DataBoundConstructor
     public SlaveLaunchLogs() {
@@ -91,7 +95,10 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
     @Override
     public void addContents(@NonNull Container container) {
-        ExtensionList.lookupSingleton(LogArchiver.class).addContents(container);
+        ExtensionList<LogArchiver> list = ExtensionList.lookup(LogArchiver.class);
+        if (!list.isEmpty()) {
+            list.get(0).addContents(container);
+        }
     }
 
     @NonNull
@@ -120,18 +127,29 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
     public static final class LogArchiver extends ConsoleLogFilter {
 
         private final File logDir;
-        private final RewindableRotatingFileOutputStream stream;
+        private final RotatingLog rotatingLog;
 
-        public LogArchiver() throws IOException {
+        public LogArchiver() {
             logDir = new File(SupportPlugin.getLogsDirectory(), "agent-launches");
-            stream = new RewindableRotatingFileOutputStream(new File(logDir, "all.log"), MAX_ROTATE_LOGS);
-            stream.rewind();
+
+            // Apply validation to static configuration
+            int maxRotate = MAX_ROTATE_LOGS < 0 ? 0 : MAX_ROTATE_LOGS;
+            long maxFileSize = MAX_FILE_SIZE <= 0 ? FileListCapComponent.MAX_FILE_SIZE : MAX_FILE_SIZE;
+
+            // Create rotating log
+            RotatingLog tempLog = null;
+            try {
+                tempLog = new RotatingLog(logDir, maxFileSize, maxRotate);
+            } catch (IOException e) {
+                LOGGER.log(Level.WARNING, "Failed to create agent launch log rotating log", e);
+            }
+            rotatingLog = tempLog;
         }
 
         @Override
         public OutputStream decorateLogger(Computer computer, OutputStream logger) {
-            if (computer instanceof SlaveComputer) {
-                return new TeeOutputStream(logger, new PrefixedStream(stream, computer.getName()));
+            if (rotatingLog != null && computer instanceof SlaveComputer) {
+                return new TeeOutputStream(logger, new PrefixedStream(rotatingLog, computer.getName()));
             } else {
                 return logger;
             }
@@ -158,35 +176,42 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         @Terminator
         public static void close() {
-            try {
-                ExtensionList.lookupSingleton(LogArchiver.class).stream.close();
-            } catch (IOException x) {
-                LOGGER.log(Level.WARNING, null, x);
+            ExtensionList<LogArchiver> list = ExtensionList.lookup(LogArchiver.class);
+            if (!list.isEmpty()) {
+                LogArchiver archiver = list.get(0);
+                if (archiver.rotatingLog != null) {
+                    try {
+                        archiver.rotatingLog.close();
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "Failed to close agent launch log rotating log", e);
+                    }
+                }
             }
         }
     }
 
-    static class PrefixedStream extends LineTransformationOutputStream.Delegating {
-        private final String name;
+    static class PrefixedStream extends LineTransformationOutputStream {
+        private final RotatingLog rotatingLog;
+        private final byte[] nameBytes;
 
-        PrefixedStream(OutputStream out, String name) {
-            super(out);
-            this.name = name;
+        PrefixedStream(RotatingLog rotatingLog, String name) {
+            this.rotatingLog = rotatingLog;
+            this.nameBytes = name.getBytes(StandardCharsets.UTF_8);
         }
 
         @Override
         protected void eol(byte[] b, int len) throws IOException {
-            synchronized (out) {
-                out.write('[');
-                out.write(DateTimeFormatter.ISO_INSTANT
-                        .format(Instant.now().truncatedTo(ChronoUnit.MILLIS))
-                        .getBytes(StandardCharsets.US_ASCII));
-                out.write(' ');
-                out.write(name.getBytes(StandardCharsets.UTF_8));
-                out.write(']');
-                out.write(' ');
-                out.write(b, 0, len);
-            }
+            rotatingLog.writeLine(nameBytes, b, len);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            rotatingLog.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            super.close(); // Calls forceEol() only; NEVER closes the rotating log
         }
     }
 
@@ -226,6 +251,140 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
         @Override
         public String getDisplayName() {
             return "Agent Launch Logs";
+        }
+    }
+
+    /**
+     * Manages the agent launch log rotating log with size-based rotation.
+     * All state is guarded by {@code this}.
+     */
+    static final class RotatingLog implements Closeable, Flushable {
+
+        static final String FILE_NAME = "all.log";
+        private static final Logger LOGGER = Logger.getLogger(RotatingLog.class.getName());
+
+        // DateTimeFormatter that always includes milliseconds (3 digits)
+        private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+                new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
+
+        private final File dir;
+        private final long maxFileSize;
+        private final RewindableRotatingFileOutputStream rotating;
+        private long written;
+        private boolean failureLogged;
+        private boolean closed;
+
+        /**
+         * Creates a new rotating log and performs startup rotation.
+         *
+         * @param dir directory for log files
+         * @param maxFileSize maximum bytes per file before rotating
+         * @param maxRotate number of rotated files to keep
+         * @throws IOException if the rotating log cannot be created
+         */
+        RotatingLog(File dir, long maxFileSize, int maxRotate) throws IOException {
+            this.dir = dir;
+            this.maxFileSize = maxFileSize;
+            this.rotating = new RewindableRotatingFileOutputStream(new File(dir, FILE_NAME), maxRotate);
+            this.rotating.rewind();
+            this.written = 0;
+            this.failureLogged = false;
+            this.closed = false;
+        }
+
+        /**
+         * Appends one prefixed record. Never throws (failure isolation).
+         *
+         * @param prefixNameBytes computer name as UTF-8 bytes
+         * @param line line data
+         * @param len length of valid data in line
+         */
+        synchronized void writeLine(byte[] prefixNameBytes, byte[] line, int len) {
+            if (closed) {
+                LOGGER.log(Level.FINE, "writeLine called after close, ignoring");
+                return;
+            }
+
+            try {
+                // Build record: [ISO_INSTANT computerName] line\n
+                byte[] timestamp = TIMESTAMP_FORMATTER
+                        .format(Instant.now().truncatedTo(ChronoUnit.MILLIS))
+                        .getBytes(StandardCharsets.US_ASCII);
+
+                // Calculate record size
+                int recordSize = 1 + timestamp.length + 1 + prefixNameBytes.length + 2 + len;
+                boolean needsNewline = (len == 0 || line[len - 1] != '\n');
+                if (needsNewline) {
+                    recordSize++;
+                }
+
+                // Rotate if needed (only between records)
+                if (written > 0 && written + recordSize > maxFileSize) {
+                    rotating.flush();
+                    rotating.rewind();
+                    written = 0;
+                }
+
+                // Write the record
+                rotating.write('[');
+                rotating.write(timestamp);
+                rotating.write(' ');
+                rotating.write(prefixNameBytes);
+                rotating.write(']');
+                rotating.write(' ');
+                rotating.write(line, 0, len);
+                if (needsNewline) {
+                    rotating.write('\n');
+                }
+
+                written += recordSize;
+
+                // Reset failure state on success
+                if (failureLogged) {
+                    LOGGER.log(Level.INFO, "Agent launch log rotating log write succeeded after previous failures");
+                    failureLogged = false;
+                }
+            } catch (IOException | RuntimeException e) {
+                Level level = failureLogged ? Level.FINE : Level.WARNING;
+                LOGGER.log(
+                        level,
+                        "Failed to write to agent launch log rotating log, agent launch will continue normally",
+                        e);
+                failureLogged = true;
+            }
+        }
+
+        @Override
+        public synchronized void flush() {
+            if (closed) {
+                return;
+            }
+            try {
+                rotating.flush();
+            } catch (IOException | RuntimeException e) {
+                Level level = failureLogged ? Level.FINE : Level.WARNING;
+                LOGGER.log(level, "Failed to flush agent launch log rotating log", e);
+                failureLogged = true;
+            }
+        }
+
+        @Override
+        public synchronized void close() {
+            if (closed) {
+                return;
+            }
+            try {
+                flush();
+                rotating.close();
+            } catch (IOException | RuntimeException e) {
+                LOGGER.log(Level.WARNING, "Failed to close agent launch log rotating log", e);
+            } finally {
+                closed = true;
+            }
+        }
+
+        File getDirectory() {
+            return dir;
         }
     }
 }
