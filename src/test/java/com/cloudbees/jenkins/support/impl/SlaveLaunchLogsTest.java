@@ -6,9 +6,12 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.cloudbees.jenkins.support.SupportTestUtils;
 import com.cloudbees.jenkins.support.filter.ContentFilters;
+import hudson.ExtensionComponent;
 import hudson.ExtensionList;
 import hudson.FilePath;
 import hudson.model.Computer;
@@ -18,7 +21,9 @@ import hudson.remoting.Channel;
 import hudson.slaves.ComputerListener;
 import hudson.slaves.SlaveComputer;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.logging.Level;
+import jenkins.ExtensionFilter;
 import jenkins.slaves.StandardOutputSwapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -165,6 +170,46 @@ class SlaveLaunchLogsTest {
         @Override
         public void preOnline(Computer c, Channel channel, FilePath root, TaskListener listener) {
             listener.getLogger().println("password=s3cr3t");
+        }
+    }
+
+    @Test
+    void bundleIncludesBufferedLines() throws Exception {
+        var s = j.createOnlineSlave();
+        String uniqueMessage = "Fresh test message marker " + UUID.randomUUID();
+
+        // Write directly to agent's listener
+        ((SlaveComputer) s.toComputer()).getListener().getLogger().println(uniqueMessage);
+
+        // Invoke component once with no await
+        String bundleContent =
+                SupportTestUtils.invokeComponentToString(ExtensionList.lookupSingleton(SlaveLaunchLogs.class));
+
+        assertThat("Unique message should be in bundle immediately", bundleContent, containsString(uniqueMessage));
+    }
+
+    @Test
+    void toleratesLogArchiverExcludedByExtensionFilter() throws Exception {
+        // Assert LogArchiver.get() is null
+        assertNull(SlaveLaunchLogs.LogArchiver.get(), "LogArchiver should be excluded by ExtensionFilter");
+
+        // Assert invokeComponentToMap doesn't throw
+        assertDoesNotThrow(() -> {
+            SupportTestUtils.invokeComponentToMap(ExtensionList.lookupSingleton(SlaveLaunchLogs.class));
+        });
+
+        // Assert close() doesn't throw
+        assertDoesNotThrow(() -> {
+            SlaveLaunchLogs.LogArchiver.close();
+        });
+    }
+
+    @TestExtension("toleratesLogArchiverExcludedByExtensionFilter")
+    public static final class ExcludeLogArchiver extends ExtensionFilter {
+        @Override
+        public <T> boolean allows(Class<T> type, ExtensionComponent<T> component) {
+            return !SlaveLaunchLogs.LogArchiver.class.equals(
+                    component.getInstance().getClass());
         }
     }
 }

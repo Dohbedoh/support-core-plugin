@@ -50,6 +50,27 @@ The system property `com.cloudbees.jenkins.support.SupportPlugin.AUTO_BUNDLE_PER
 be used to enforce the value of the period. Values between 0 and 24 are accepted. A value of `0`
 enforce the disablement of the automated support bundle generation. 
 
+### Agent Launch Logs
+
+The plugin maintains a unified log of all agent launch activity at `$JENKINS_HOME/logs/support/agent-launches/all.log`. 
+This log preserves launch history even for deleted or ephemeral agents. The log is bounded by size to prevent 
+unbounded disk usage.
+
+The following system properties control the agent launch log behavior:
+
+* **`com.cloudbees.jenkins.support.impl.SlaveLaunchLogs.MAX_FILE_SIZE`**: Maximum size in bytes per log file 
+  before rotation (default: 2,000,000 = 2 MB). Total disk usage is approximately 
+  `MAX_FILE_SIZE × (MAX_ROTATE_LOGS + 1)`.
+* **`com.cloudbees.jenkins.support.impl.SlaveLaunchLogs.MAX_ROTATE_LOGS`**: Number of rotated log files to keep 
+  (default: 9). With the default settings, up to 10 files (all.log plus all.log.1 through all.log.9) are kept, 
+  for a total of approximately 20 MB. Setting this to 0 keeps only all.log, which is truncated on each rotation.
+* **`com.cloudbees.jenkins.support.impl.SlaveLaunchLogs.DISABLE_ARCHIVE`**: When set to `true`, disables 
+  the unified agent launch log entirely (default: `false`). Individual agent logs in `logs/slaves/<name>/` 
+  are unaffected.
+
+**Note:** At startup, any `all.log*` file larger than `MAX_FILE_SIZE` (for example left over by a previous 
+version, or by a larger previous setting) is removed.
+
 ## Docker File
 
 As part of the support bundle if the About Jenkins option is checked

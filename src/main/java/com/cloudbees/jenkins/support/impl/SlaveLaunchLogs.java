@@ -40,16 +40,20 @@ import hudson.console.LineTransformationOutputStream;
 import hudson.init.Terminator;
 import hudson.model.AbstractModelObject;
 import hudson.model.Computer;
+import hudson.model.PeriodicWork;
 import hudson.model.Run;
 import hudson.security.Permission;
 import hudson.slaves.SlaveComputer;
 import hudson.util.io.RewindableRotatingFileOutputStream;
+import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.Flushable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -75,6 +79,8 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
             Integer.getInteger(SlaveLaunchLogs.class.getName() + ".MAX_ROTATE_LOGS", 9);
     private static final long MAX_FILE_SIZE =
             Long.getLong(SlaveLaunchLogs.class.getName() + ".MAX_FILE_SIZE", FileListCapComponent.MAX_FILE_SIZE);
+    private static final boolean DISABLE_ARCHIVE =
+            Boolean.getBoolean(SlaveLaunchLogs.class.getName() + ".DISABLE_ARCHIVE");
 
     @DataBoundConstructor
     public SlaveLaunchLogs() {
@@ -95,9 +101,9 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
     @Override
     public void addContents(@NonNull Container container) {
-        ExtensionList<LogArchiver> list = ExtensionList.lookup(LogArchiver.class);
-        if (!list.isEmpty()) {
-            list.get(0).addContents(container);
+        LogArchiver archiver = LogArchiver.get();
+        if (archiver != null) {
+            archiver.addContents(container);
         }
     }
 
@@ -136,14 +142,34 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
             int maxRotate = MAX_ROTATE_LOGS < 0 ? 0 : MAX_ROTATE_LOGS;
             long maxFileSize = MAX_FILE_SIZE <= 0 ? FileListCapComponent.MAX_FILE_SIZE : MAX_FILE_SIZE;
 
-            // Create rotating log
-            RotatingLog tempLog = null;
-            try {
-                tempLog = new RotatingLog(logDir, maxFileSize, maxRotate);
-            } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "Failed to create agent launch log rotating log", e);
+            // Phase 1: quarantine oversized files (always runs, even when disabled)
+            RotatingLog.quarantineOversized(logDir, maxFileSize);
+
+            // Phase 2: delete quarantined files asynchronously
+            jenkins.util.Timer.get().submit(() -> {
+                RotatingLog.deleteQuarantined(logDir);
+            });
+
+            // Create rotating log if enabled
+            if (!DISABLE_ARCHIVE) {
+                RotatingLog tempLog = null;
+                try {
+                    tempLog = new RotatingLog(logDir, maxFileSize, maxRotate);
+                } catch (IOException e) {
+                    LOGGER.log(Level.WARNING, "Failed to create agent launch log rotating log", e);
+                }
+                rotatingLog = tempLog;
+            } else {
+                rotatingLog = null;
             }
-            rotatingLog = tempLog;
+        }
+
+        /**
+         * Returns the LogArchiver instance, or null if it's absent (e.g., filtered out by extension-filter plugin).
+         */
+        static LogArchiver get() {
+            ExtensionList<LogArchiver> list = ExtensionList.lookup(LogArchiver.class);
+            return list.isEmpty() ? null : list.get(0);
         }
 
         @Override
@@ -162,6 +188,11 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
         }
 
         public void addContents(@NonNull Container container) {
+            // Flush before reading to ensure latest data is in files
+            if (rotatingLog != null) {
+                rotatingLog.flush();
+            }
+
             File[] files = logDir.listFiles(ROTATED_LOGFILE_FILTER);
             if (files != null) {
                 for (File f : files) {
@@ -176,15 +207,12 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         @Terminator
         public static void close() {
-            ExtensionList<LogArchiver> list = ExtensionList.lookup(LogArchiver.class);
-            if (!list.isEmpty()) {
-                LogArchiver archiver = list.get(0);
-                if (archiver.rotatingLog != null) {
-                    try {
-                        archiver.rotatingLog.close();
-                    } catch (Exception e) {
-                        LOGGER.log(Level.WARNING, "Failed to close agent launch log rotating log", e);
-                    }
+            LogArchiver archiver = get();
+            if (archiver != null && archiver.rotatingLog != null) {
+                try {
+                    archiver.rotatingLog.close();
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Failed to close agent launch log rotating log", e);
                 }
             }
         }
@@ -206,7 +234,7 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         @Override
         public void flush() throws IOException {
-            rotatingLog.flush();
+            // No-op: rotating log flushes itself periodically
         }
 
         @Override
@@ -255,6 +283,26 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
     }
 
     /**
+     * Periodically flushes the agent launch log rotating log to disk.
+     */
+    @Extension
+    public static final class Flusher extends PeriodicWork {
+
+        @Override
+        public long getRecurrencePeriod() {
+            return 3000; // 3 seconds, same as CustomLogs.LogFlusher
+        }
+
+        @Override
+        protected void doRun() {
+            LogArchiver archiver = LogArchiver.get();
+            if (archiver != null && archiver.rotatingLog != null) {
+                archiver.rotatingLog.flush();
+            }
+        }
+    }
+
+    /**
      * Manages the agent launch log rotating log with size-based rotation.
      * All state is guarded by {@code this}.
      */
@@ -262,6 +310,7 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         static final String FILE_NAME = "all.log";
         private static final Logger LOGGER = Logger.getLogger(RotatingLog.class.getName());
+        private static final int BUFFER_SIZE = 64 * 1024;
 
         // DateTimeFormatter that always includes milliseconds (3 digits)
         private static final DateTimeFormatter TIMESTAMP_FORMATTER =
@@ -270,7 +319,9 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
         private final File dir;
         private final long maxFileSize;
         private final RewindableRotatingFileOutputStream rotating;
+        private final BufferedOutputStream out;
         private long written;
+        private boolean dirty;
         private boolean failureLogged;
         private boolean closed;
 
@@ -287,7 +338,9 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
             this.maxFileSize = maxFileSize;
             this.rotating = new RewindableRotatingFileOutputStream(new File(dir, FILE_NAME), maxRotate);
             this.rotating.rewind();
+            this.out = new BufferedOutputStream(rotating, BUFFER_SIZE);
             this.written = 0;
+            this.dirty = false;
             this.failureLogged = false;
             this.closed = false;
         }
@@ -320,24 +373,25 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
                 // Rotate if needed (only between records)
                 if (written > 0 && written + recordSize > maxFileSize) {
-                    rotating.flush();
+                    out.flush();
                     rotating.rewind();
                     written = 0;
                 }
 
                 // Write the record
-                rotating.write('[');
-                rotating.write(timestamp);
-                rotating.write(' ');
-                rotating.write(prefixNameBytes);
-                rotating.write(']');
-                rotating.write(' ');
-                rotating.write(line, 0, len);
+                out.write('[');
+                out.write(timestamp);
+                out.write(' ');
+                out.write(prefixNameBytes);
+                out.write(']');
+                out.write(' ');
+                out.write(line, 0, len);
                 if (needsNewline) {
-                    rotating.write('\n');
+                    out.write('\n');
                 }
 
                 written += recordSize;
+                dirty = true;
 
                 // Reset failure state on success
                 if (failureLogged) {
@@ -356,11 +410,12 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         @Override
         public synchronized void flush() {
-            if (closed) {
+            if (!dirty || closed) {
                 return;
             }
             try {
-                rotating.flush();
+                out.flush();
+                dirty = false;
             } catch (IOException | RuntimeException e) {
                 Level level = failureLogged ? Level.FINE : Level.WARNING;
                 LOGGER.log(level, "Failed to flush agent launch log rotating log", e);
@@ -375,7 +430,7 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
             }
             try {
                 flush();
-                rotating.close();
+                out.close();
             } catch (IOException | RuntimeException e) {
                 LOGGER.log(Level.WARNING, "Failed to close agent launch log rotating log", e);
             } finally {
@@ -385,6 +440,72 @@ public class SlaveLaunchLogs extends ObjectComponent<Computer> {
 
         File getDirectory() {
             return dir;
+        }
+
+        /**
+         * Quarantines oversized files by renaming them (phase 1 of cleanup).
+         * A file is oversized if it is larger than maxFileSize.
+         * Runs synchronously before the rotating log is created.
+         *
+         * @param dir directory containing log files
+         * @param maxFileSize size threshold
+         */
+        static void quarantineOversized(File dir, long maxFileSize) {
+            if (!dir.exists() || !dir.isDirectory()) {
+                return;
+            }
+
+            File[] files = dir.listFiles(ROTATED_LOGFILE_FILTER);
+            if (files == null) {
+                return;
+            }
+
+            for (File file : files) {
+                try {
+                    long fileSize = file.length();
+                    if (fileSize > maxFileSize) {
+                        File target = new File(dir, file.getName() + ".oversized");
+                        Files.move(file.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        LOGGER.log(Level.INFO, "Quarantined oversized file: {0} ({1} bytes)", new Object[] {
+                            file.getName(), fileSize
+                        });
+                    }
+                } catch (IOException | SecurityException e) {
+                    LOGGER.log(Level.WARNING, "Failed to quarantine oversized file: " + file.getName(), e);
+                }
+            }
+        }
+
+        /**
+         * Deletes quarantined files (phase 2 of cleanup).
+         * Should be run asynchronously on jenkins.util.Timer.
+         *
+         * @param dir directory containing log files
+         */
+        static void deleteQuarantined(File dir) {
+            if (!dir.exists() || !dir.isDirectory()) {
+                return;
+            }
+
+            File[] files = dir.listFiles((d, name) -> name.endsWith(".oversized"));
+            if (files == null) {
+                return;
+            }
+
+            for (File file : files) {
+                try {
+                    long size = file.length();
+                    if (file.delete()) {
+                        LOGGER.log(Level.INFO, "Deleted quarantined file: {0} ({1} bytes)", new Object[] {
+                            file.getName(), size
+                        });
+                    } else {
+                        LOGGER.log(Level.WARNING, "Failed to delete quarantined file: {0}", file.getName());
+                    }
+                } catch (SecurityException e) {
+                    LOGGER.log(Level.WARNING, "Failed to delete file: " + file.getName(), e);
+                }
+            }
         }
     }
 }
