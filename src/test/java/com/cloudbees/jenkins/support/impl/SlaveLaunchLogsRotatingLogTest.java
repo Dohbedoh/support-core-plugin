@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -167,5 +168,43 @@ class SlaveLaunchLogsRotatingLogTest {
         // Verify content
         assertThat("Line A content", lines.get(0), matchesPattern(".*agent-A.*partial.*"));
         assertThat("Line B content", lines.get(1), matchesPattern(".*agent-B.*full line.*"));
+    }
+
+    @Test
+    void quarantinesOnlyOversizedFilesAndDeletesQuarantined(@TempDir File dir) throws Exception {
+        int cap = 1000;
+
+        // Create all.log.1 at 3000 bytes
+        File allLog1 = new File(dir, "all.log.1");
+        try (FileOutputStream fos = new FileOutputStream(allLog1)) {
+            fos.write(new byte[3000]);
+        }
+
+        // Create all.log.2 at 500 bytes
+        File allLog2 = new File(dir, "all.log.2");
+        try (FileOutputStream fos = new FileOutputStream(allLog2)) {
+            fos.write(new byte[500]);
+        }
+
+        // Create leftover all.log.5.oversized
+        File leftoverOversized = new File(dir, "all.log.5.oversized");
+        leftoverOversized.createNewFile();
+
+        // Run quarantineOversized
+        SlaveLaunchLogs.RotatingLog.quarantineOversized(dir, cap);
+
+        // Assert all.log.1 is gone, all.log.1.oversized exists, all.log.2 is untouched
+        assertFalse(allLog1.exists(), "all.log.1 should be gone");
+        File allLog1Oversized = new File(dir, "all.log.1.oversized");
+        assertTrue(allLog1Oversized.exists(), "all.log.1.oversized should exist");
+        assertTrue(allLog2.exists(), "all.log.2 should be untouched");
+
+        // Run deleteQuarantined
+        SlaveLaunchLogs.RotatingLog.deleteQuarantined(dir);
+
+        // Assert no *.oversized files left, all.log.2 still there
+        assertFalse(allLog1Oversized.exists(), "all.log.1.oversized should be deleted");
+        assertFalse(leftoverOversized.exists(), "all.log.5.oversized should be deleted");
+        assertTrue(allLog2.exists(), "all.log.2 should still be there");
     }
 }
